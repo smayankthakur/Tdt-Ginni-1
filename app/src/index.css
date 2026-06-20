@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens — matched 1:1 to ginni-ki-baatein-buddy.lovable.app */
+:root {
+  --background: 0 0% 4%;
+  --foreground: 45 60% 94%;
+  --card: 0 0% 7%;
+  --card-foreground: 45 60% 94%;
+  --popover: 0 0% 7%;
+  --popover-foreground: 45 60% 94%;
+  --primary: 45 95% 60%;
+  --primary-foreground: 0 0% 6%;
+  --secondary: 0 0% 12%;
+  --secondary-foreground: 45 60% 94%;
+  --muted: 0 0% 10%;
+  --muted-foreground: 45 10% 70%;
+  --accent: 45 95% 62%;
+  --accent-foreground: 0 0% 6%;
+  --destructive: 0 70% 55%;
+  --border: 45 30% 18%;
+  --input: 0 0% 11%;
+  --ring: 45 95% 60%;
+  --gold: 45 90% 65%;
+  --gold-glow: 45 100% 75%;
+  --mystic: 280 70% 65%;
+  --mystic-deep: 270 60% 45%;
+  --rose: 340 70% 70%;
+  --radius: 1rem;
+
+  --gradient-cosmic: radial-gradient(ellipse at top, hsl(45 80% 20% / 0.25), transparent 60%),
+    radial-gradient(ellipse at bottom, hsl(20 70% 18% / 0.2), transparent 60%),
+    linear-gradient(180deg, hsl(0 0% 3%), hsl(0 0% 5%));
+  --gradient-gold: linear-gradient(135deg, hsl(45 95% 60%), hsl(25 90% 55%));
+  --gradient-bubble-user: linear-gradient(135deg, hsl(45 70% 35%), hsl(25 65% 30%));
+  --gradient-bubble-ginni: linear-gradient(135deg, hsl(0 0% 9%), hsl(0 0% 12%));
+  --gradient-card: linear-gradient(135deg, hsl(45 60% 18%), hsl(0 0% 8%));
+
+  --shadow-card: 0 20px 60px -10px hsl(280 80% 30% / 0.5);
+  --shadow-glow: 0 0 40px hsl(280 70% 65% / 0.35);
+  --shadow-gold: 0 0 30px hsl(45 90% 65% / 0.4);
+
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, sans-serif;
+  color: hsl(var(--foreground));
+  background: var(--gradient-cosmic);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
