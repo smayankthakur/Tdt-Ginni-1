@@ -4,32 +4,22 @@ import StarField from "./StarField";
 import Message from "./Message";
 import Composer from "./Composer";
 import SubscriptionModal from "./SubscriptionModal";
-import { welcomeMessage, SPREADS, drawCards } from "../data/tarot";
-import { generateReading } from "../lib/ginniClient";
+import { welcomeMessage, SPREADS, drawCards, LANGS, typeForQuestion } from "../data/tarot";
+import { buildReading } from "../lib/readingBuilder";
 import { startSubscription } from "../lib/razorpay";
 import {
-  canAsk,
-  recordAsk,
-  remaining,
-  isPremium,
-  grantPremium,
-  premiumDaysLeft,
-  setPremiumUntil,
-  syncFromServer,
-  markLimitReached,
+  canAsk, recordAsk, remaining, isPremium, grantPremium, premiumDaysLeft, setPremiumUntil,
 } from "../lib/rateLimit";
 
 const STARTERS = [
-  "Daily Illumination — what should I attend to today?",
-  "Matters of the Heart — clarity on a relationship.",
-  "Career Trajectory — guidance on my next move.",
-  "Spiritual Alignment — what is my soul asking of me?",
+  "Aapki shaadi kab hogi",
+  "Aapko life partner kab milega",
+  "Partner current feelings",
+  "This month for you",
 ];
 
 export default function Chat({ name, onChangeIdentity }) {
-  const [messages, setMessages] = useState([
-    { role: "ginni", text: welcomeMessage(name) },
-  ]);
+  const [messages, setMessages] = useState([{ role: "ginni", text: welcomeMessage(name) }]);
   const [spread, setSpread] = useState(3);
   const [busy, setBusy] = useState(false);
   const [showPlans, setShowPlans] = useState(false);
@@ -37,125 +27,58 @@ export default function Chat({ name, onChangeIdentity }) {
   const [premium, setPremiumState] = useState(isPremium());
   const [subscribing, setSubscribing] = useState(false);
   const [subError, setSubError] = useState("");
+  const [lang, setLang] = useState(localStorage.getItem("ginni_lang") || "hinglish");
   const endRef = useRef(null);
 
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  const chooseLang = (id) => { setLang(id); localStorage.setItem("ginni_lang", id); };
 
-  const refreshState = () => {
-    setLocked(!canAsk());
-    setPremiumState(isPremium());
-  };
-
-  const ask = async (question) => {
+  const ask = async (question, type) => {
     if (busy) return;
-    if (!canAsk()) {
-      setLocked(true);
-      setShowPlans(true); // auto-launch when limit already reached
-      return;
-    }
+    if (!canAsk()) { setLocked(true); setShowPlans(true); return; }
 
     const spreadDef = SPREADS[spread] || SPREADS[3];
     const { positions, count } = spreadDef;
     let cards = [];
-    try {
-      cards = drawCards(count);
-    } catch (e) {
-      cards = [{ name: "The Star" }];
-    }
+    try { cards = drawCards(count); } catch (e) { cards = [{ name: "The Star" }]; }
+    const readingType = type ?? typeForQuestion(question);
 
-    setMessages((m) => [
-      ...m,
-      { role: "user", text: question },
-      { role: "ginni", pending: true, count },
-    ]);
+    setMessages((m) => [...m, { role: "user", text: question }, { role: "ginni", pending: true, count }]);
     setBusy(true);
-
-    const minShuffle = new Promise((r) => setTimeout(r, 1400));
-    let hitLimit = false;
+    const minShuffle = new Promise((r) => setTimeout(r, 1300));
 
     try {
-      const [result] = await Promise.all([
-        generateReading({ name, question, positions, cards }),
-        minShuffle,
-      ]);
-
-      // Server is authoritative when it returns usage; otherwise count locally.
-      if (typeof result.remaining === "number" || result.premiumUntil) {
-        syncFromServer(result);
-      } else {
-        recordAsk();
-      }
-
-      const text =
-        result.reading && result.reading.trim()
-          ? result.reading
-          : `${name}, the cards are quiet for a moment. Thodi der baad phir poochhiye. 🌙`;
-      setMessages((m) => {
-        const next = [...m];
-        next[next.length - 1] = { role: "ginni", text, cards, positions };
-        return next;
-      });
+      await minShuffle;
+      const reading = buildReading({ type: readingType, cards, positions, lang, name });
+      recordAsk();
+      setMessages((m) => { const n = [...m]; n[n.length - 1] = { role: "ginni", reading }; return n; });
     } catch (err) {
-      if (err && err.code === "daily_limit") {
-        hitLimit = true;
-        syncFromServer(err.info || { remaining: 0 });
-        markLimitReached();
-        setMessages((m) => {
-          const next = [...m];
-          next[next.length - 1] = {
-            role: "ginni",
-            text: `${name}, aaj ki readings poori ho gayi hain. 30 days full access ke saath unlimited guidance paayiye. 🌙`,
-          };
-          return next;
-        });
-      } else {
-        setMessages((m) => {
-          const next = [...m];
-          next[next.length - 1] = {
-            role: "ginni",
-            text: `Kshama kijiye, ${name} — abhi cards shaant hain. Thodi der baad phir poochhiye. 🌙`,
-          };
-          return next;
-        });
-      }
+      setMessages((m) => {
+        const n = [...m];
+        n[n.length - 1] = { role: "ginni", text: `Kshama kijiye, ${name} — abhi cards shaant hain. Thodi der baad phir poochhiye. 🌙` };
+        return n;
+      });
     } finally {
       setBusy(false);
-      refreshState();
-      if (hitLimit || (!isPremium() && remaining() === 0)) {
-        setTimeout(() => setShowPlans(true), 700);
-      }
+      setLocked(!canAsk());
+      setPremiumState(isPremium());
+      if (!isPremium() && remaining() === 0) setTimeout(() => setShowPlans(true), 700);
     }
   };
 
-  const activatePremium = (premiumUntil) => {
-    if (premiumUntil) setPremiumUntil(premiumUntil);
-    else grantPremium();
-    setPremiumState(true);
-    setLocked(false);
-    setShowPlans(false);
-    setSubError("");
+  const activatePremium = (until) => {
+    if (until) setPremiumUntil(until); else grantPremium();
+    setPremiumState(true); setLocked(false); setShowPlans(false); setSubError("");
   };
-
   const handleSubscribe = async () => {
     if (subscribing) return;
-    setSubError("");
-    setSubscribing(true);
+    setSubError(""); setSubscribing(true);
     try {
       const res = await startSubscription({ name });
       if (res.success) activatePremium(res.premiumUntil);
       else if (res.incubated) activatePremium();
-      else if (res.dismissed) {
-        /* user closed checkout — leave modal open, no error */
-      }
-    } catch (e) {
-      setSubError("Subscription could not be completed. Please try again.");
-      // eslint-disable-next-line no-console
-      console.error(e);
-    } finally {
-      setSubscribing(false);
-    }
+    } catch (e) { setSubError("Subscription could not be completed. Please try again."); }
+    finally { setSubscribing(false); }
   };
 
   const left = remaining();
@@ -165,7 +88,7 @@ export default function Chat({ name, onChangeIdentity }) {
     <div className="relative flex h-screen flex-col">
       <StarField count={28} />
 
-      <header className="relative z-10 flex items-center justify-between border-b border-border px-5 py-3 backdrop-blur">
+      <header className="relative z-10 flex items-center justify-between gap-2 border-b border-border px-4 py-3 backdrop-blur sm:px-5">
         <div className="flex items-center gap-3">
           <MoonLogo size={40} />
           <div>
@@ -173,17 +96,22 @@ export default function Chat({ name, onChangeIdentity }) {
             <div className="text-xs text-muted-foreground">In session · The deck is prepared ✨</div>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-sm sm:gap-3">
-          <button
-            onClick={() => setShowPlans(true)}
-            className="hidden rounded-full border border-border bg-secondary/60 px-3 py-1 text-[11px] text-muted-foreground transition hover:text-foreground sm:inline-block"
-          >
-            ✦ {premium ? "Premium counsel" : "Standard counsel"}
-          </button>
-          <button
-            onClick={onChangeIdentity}
-            className="text-muted-foreground transition hover:text-foreground"
-          >
+        <div className="flex items-center gap-2 text-sm">
+          {/* language toggle */}
+          <div className="hidden items-center rounded-full border border-border bg-secondary/50 p-0.5 sm:flex">
+            {LANGS.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => chooseLang(l.id)}
+                className={`rounded-full px-2.5 py-1 text-[11px] transition ${
+                  lang === l.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={onChangeIdentity} className="hidden text-muted-foreground transition hover:text-foreground sm:inline">
             Change identity
           </button>
           <button
@@ -197,20 +125,16 @@ export default function Chat({ name, onChangeIdentity }) {
 
       <main className="relative z-10 flex-1 overflow-y-auto px-4 py-6">
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
-          {messages.map((m, i) => (
-            <Message key={i} msg={m} />
-          ))}
+          {messages.map((m, i) => <Message key={i} msg={m} name={name} />)}
 
           {messages.length === 1 && (
             <div className="mt-1 animate-rise">
-              <div className="mb-2 text-[11px] tracking-[0.2em] text-muted-foreground">
-                A STARTING POINT
-              </div>
+              <div className="mb-2 text-[11px] tracking-[0.2em] text-muted-foreground">A STARTING POINT</div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {STARTERS.map((s) => (
                   <button
                     key={s}
-                    onClick={() => ask(s)}
+                    onClick={() => ask(s, typeForQuestion(s))}
                     disabled={locked || busy}
                     className="rounded-2xl border border-border bg-secondary/40 px-4 py-2.5 text-left text-sm text-foreground/90 transition hover:border-gold/40 disabled:opacity-40"
                   >
@@ -235,13 +159,8 @@ export default function Chat({ name, onChangeIdentity }) {
       <Composer spread={spread} setSpread={setSpread} onSend={ask} locked={locked || busy} />
 
       <SubscriptionModal
-        open={showPlans}
-        premium={premium}
-        daysLeft={daysLeft}
-        busy={subscribing}
-        error={subError}
-        onClose={() => setShowPlans(false)}
-        onSubscribe={handleSubscribe}
+        open={showPlans} premium={premium} daysLeft={daysLeft} busy={subscribing} error={subError}
+        onClose={() => setShowPlans(false)} onSubscribe={handleSubscribe}
       />
     </div>
   );

@@ -7,6 +7,27 @@ Hinglish reading out**.
 See **[ANALYSIS.md](./ANALYSIS.md)** for the complete teardown of the original
 (UX, persona, reading format, monetisation, tech stack).
 
+## Reading content (authored, not AI)
+
+Readings come from Ginni's **own authored library** (`combined.md`), parsed into
+`app/src/data/readings.js` — verbatim, deterministic, no LLM required:
+
+- 8 question types are fully authored, keyed per card: third-party timing, shaadi
+  kab hogi, life partner kab milega, baby kab hoga, soulmate kab milega, partner
+  current feelings, spiritual journey, this month for you.
+- Three languages with a **Hinglish / English / हिंदी** toggle (Hinglish default).
+  Sections 1–5 have all three; section 8 has Hinglish (toggle falls back to it).
+- Any other question (Yes/No, free text, etc.) uses a deterministic generic
+  per-card note.
+- Coverage ≈ 99% of cards; the few source gaps fall back to the generic note.
+
+Regenerate the data after editing `combined.md`:
+`node scripts/parse-readings.mjs` (place `combined.md` next to the script).
+
+Because readings are now local + deterministic, the app needs **no LLM/Supabase
+to run**. The LLM edge function (`tarot-chat`) is kept in the repo but optional;
+Supabase/Razorpay are only needed for real subscription billing.
+
 ## What's inside
 
 ```

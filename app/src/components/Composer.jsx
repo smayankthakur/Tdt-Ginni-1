@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { CATEGORIES, TEMPLATES, SPREADS } from "../data/tarot";
+import { CATEGORIES, TEMPLATES, SPREADS, typeForQuestion } from "../data/tarot";
 
 export default function Composer({ spread, setSpread, onSend, locked }) {
   const [category, setCategory] = useState("ALL");
@@ -13,7 +13,7 @@ export default function Composer({ spread, setSpread, onSend, locked }) {
   const send = (text) => {
     const q = (text ?? value).trim();
     if (!q || locked) return;
-    onSend(q);
+    onSend(q, typeForQuestion(q));
     setValue("");
   };
 

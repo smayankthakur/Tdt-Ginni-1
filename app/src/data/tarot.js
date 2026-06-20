@@ -118,3 +118,31 @@ export const TEMPLATES = [
 
 export const welcomeMessage = (name) =>
   `Welcome, ${name}. Main Ginni hoon. Ek gehri saans lijiye, aur jab aap tayyar hon, woh sawaal poochhiye jo aapke zehan mein chal raha hai. The cards will speak with the grace it deserves. 🌌`;
+
+// --- Authored-reading mapping (from combined.md) ---------------------------
+export const TYPE_BY_TEMPLATE = {
+  "Third party situation kab end hogi": "third_party",
+  "Aapki shaadi kab hogi": "shaadi",
+  "Aapko life partner kab milega": "life_partner",
+  "Aapko baby kab hoga": "baby",
+  "Aapko soulmate kab milega": "soulmate",
+  "Partner current feelings": "partner_feelings",
+  "Spiritual journey reading": "spiritual_journey",
+  "This month for you": "this_month",
+};
+export const TYPE_LABELS = {
+  third_party: "Third party situation",
+  shaadi: "Shaadi kab hogi",
+  life_partner: "Life partner kab milega",
+  baby: "Baby kab hoga",
+  soulmate: "Soulmate kab milega",
+  partner_feelings: "Partner ki current feelings",
+  spiritual_journey: "Spiritual journey",
+  this_month: "This month for you",
+};
+export const LANGS = [
+  { id: "hinglish", label: "Hinglish" },
+  { id: "english", label: "English" },
+  { id: "hindi", label: "हिंदी" },
+];
+export const typeForQuestion = (text) => TYPE_BY_TEMPLATE[(text || "").trim()] || null;
