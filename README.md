@@ -7,6 +7,15 @@ Hinglish reading out**.
 See **[ANALYSIS.md](./ANALYSIS.md)** for the complete teardown of the original
 (UX, persona, reading format, monetisation, tech stack).
 
+## Reading flow (interactive card pick)
+
+Asking a question opens a full-screen picker: **shuffle → the full 78-card deck
+spreads face-down in a peeking row → the querent picks N cards** (N = the chosen
+spread: 1/3/5) **without seeing them → the reading is revealed**. Cards stay
+face-down during selection, the deck is re-shuffled every time (always different,
+unique cards), and elegant reusable animations (`gx-*` classes in `index.css`)
+power the deal/glow/fade motion. See `app/src/components/CardPicker.jsx`.
+
 ## Reading content (authored, not AI)
 
 Readings come from Ginni's **own authored library** (`combined.md`), parsed into
@@ -15,8 +24,14 @@ Readings come from Ginni's **own authored library** (`combined.md`), parsed into
 - 8 question types are fully authored, keyed per card: third-party timing, shaadi
   kab hogi, life partner kab milega, baby kab hoga, soulmate kab milega, partner
   current feelings, spiritual journey, this month for you.
-- Three languages with a **Hinglish / English / हिंदी** toggle (Hinglish default).
-  Sections 1–5 have all three; section 8 has Hinglish (toggle falls back to it).
+- Five language options via the header toggle (Hinglish default):
+  **Hinglish · EN-IN · EN-US · EN-UK · हिंदी**. EN-IN is the authored English;
+  EN-US/EN-UK apply American/British spelling transforms (`SPELL` in
+  `readingBuilder.js`). **Hindi is complete** for every section — gaps that were
+  Hinglish-only in the source are auto-transliterated to Devanagari
+  (`scripts/translit.cjs`, baked into `readings.js`). English stays authored for
+  sections 1–5/7; the Hinglish-only sections fall back to Hinglish + a small
+  "(Translation coming soon)" note for the EN variants.
 - Any other question (Yes/No, free text, etc.) uses a deterministic generic
   per-card note.
 - Coverage ≈ 99% of cards; the few source gaps fall back to the generic note.

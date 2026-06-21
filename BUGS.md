@@ -1,66 +1,51 @@
-# Ginni Ki Baatein replica — bug list & fixes
+# Ginni Ki Baatein — bug list & fixes
 
-Status after the "fix all bugs" pass. Build compiles clean; card logic and
-fallbacks are tested.
+Latest review covers the interactive card-pick flow and the authored-reading
+rendering. Build compiles clean; reading lookup + builder unit-tested.
 
-## High — FIXED
+## Fixed in this round
 
-1. **Quota & subscription now enforced server-side.** ✅
-   Added `app/supabase/schema.sql` (`ginni_access` table, RLS on, no public
-   policies). `tarot-chat` now checks the device's daily count and premium window
-   **before** generating, increments usage after, and returns
-   `{ premium, premiumUntil, remaining }`. On limit it returns **HTTP 429** and the
-   client shows the modal. The browser can no longer grant itself access by editing
-   `localStorage` (localStorage is now just a UI mirror, synced from the server).
-   *Enforcement activates automatically when `SUPABASE_URL` +
-   `SUPABASE_SERVICE_ROLE_KEY` are present (they are, in deployed functions).*
+1. **Authored markdown rendered literally** ✅ *(visible quality bug)*
+   The authored text contains `*italic*`, and `- >` / `>` / `•` bullet markers.
+   The renderer only handled `**bold**`, so readers saw raw `*new chapter*` and
+   `- >` lines. `Message.jsx` now renders **bold**, *italic*, and bullet lists,
+   and strips stray bullet/blockquote markers.
 
-2. **Edge functions hardened.** ✅
-   CORS origin is now configurable via `ALLOWED_ORIGIN` (default `*`, set your
-   domain in prod). Per-device daily rate limiting is enforced in `tarot-chat`.
-   Deploy **without** `--no-verify-jwt` so only callers with your anon key reach
-   them (see README).
+2. **Card-pick auto-launch could stall** ✅
+   The "reveal reading" timer was scheduled in an effect whose deps changed on
+   re-render, so React's cleanup sometimes cancelled it and the reading never
+   appeared. The completion timer is now keyed only to the `chosen` phase (and
+   the cards are captured in a ref), so it always fires ~1s after the last pick.
 
-## Medium — FIXED
+3. **Repetitive intro line** ✅
+   Every reading opened with "Welcome, {name}…". Reworded to tie to the chosen
+   cards and not repeat "Welcome" on each reading.
 
-3. **Grant aligned to the real billing cycle.** ✅
-   `verify-razorpay-payment` now fetches the subscription's `current_end` from
-   Razorpay and sets the access window to that (falls back to +30 days), then
-   persists it to `ginni_access`.
+4. **No scroll affordance on the 78-card spread** ✅
+   Added left/right gradient fades so it's clear the deck continues off-screen.
 
-4. **Card images — own-host path made first-class.** ✅ (mitigated)
-   The app already prefers `VITE_CARD_IMAGE_BASE` and only falls back to Wikimedia.
-   `scripts/rename-cards.mjs` prepares your deck; README documents hosting it so
-   Wikimedia is just a safety net, not the production source.
+## Known / by design (not bugs)
 
-5. **Reading layout no longer depends on exact model headings.** ✅
-   `Message.jsx` now normalises headings (tolerates casing, `*` markdown, trailing
-   `:`) and **guarantees** the drawn-card strip renders even if the model omits the
-   "The Revelations" line or position labels.
+- **Quota + subscription are client-side** now that readings are local and
+  deterministic (no LLM call to enforce against). The Supabase `tarot-chat`
+  enforcement only applies if you route readings back through the LLM. For a paid
+  product, gate the reading behind a server check keyed on device/auth.
+- **Section 8 (this month) English/Hindi** are irregular in the source, so the
+  language toggle falls back to Hinglish there. Sections 1–5 have all three.
+- **~6 of 624 authored entries** had irregular source formatting and fall back to
+  the deterministic generic note (e.g. The Chariot in "life partner", Nine of
+  Wands in "this month").
+- **Unused LLM code** (`lib/ginniClient.js`, `lib/demoReading.js`,
+  `functions/tarot-chat`) is retained as an optional path; the app no longer
+  calls it for readings.
+- **Preview uses the Tailwind Play CDN** — intentional for the zero-install demo
+  file; the real `app/` build compiles Tailwind via Vite.
 
-## Low / cosmetic — FIXED
+## Verified working
 
-6. **Daily reset uses the user's local date** (not UTC). ✅ (`todayLocal()`), and
-   the client sends `localDate` to the server so the server buckets usage the same way.
-
-7. **Bold-prefix regex restricted** to actual position labels
-   (`Past|Present|Future|Focus|Situation|Obstacle|Advice|Influences|Outcome|Card N`). ✅
-
-8. **Inputs have `aria-label`s** (onboarding "Your name", composer "Your question"). ✅
-
-9. **Preview uses the Tailwind Play CDN** — this is intentional: `preview/index.html`
-   is a zero-install demo artifact. The real app (`app/`) compiles Tailwind via Vite
-   for production. Not a runtime bug. ℹ️
-
-## Still-true notes (by design)
-
-- In **demo mode** (no Supabase backend configured) quota/premium fall back to
-  `localStorage` so the standalone preview runs offline. Server enforcement only
-  applies once the backend env is set — which is the secure production path.
-- Razorpay `RAZORPAY_TOTAL_COUNT` (default 12) is the number of billing cycles on
-  the subscription; the access window itself follows `current_end`.
-
-## Verified
-
-- App + all four edge functions are complete and well-formed; client bundle builds with no errors.
-- 78-card deck, 0 reversed; card image URLs resolve; offline + error fallbacks intact.
+- Shuffle → spread (78 face-down) → pick N → auto-reveal, with the deck
+  re-shuffled each open (always different, unique cards), never revealing faces
+  during selection.
+- 78-card deck, 0 reversed; card images resolve; image/offline fallbacks intact.
+- App + edge functions compile; reading builder returns correct text in all three
+  languages plus the generic fallback.

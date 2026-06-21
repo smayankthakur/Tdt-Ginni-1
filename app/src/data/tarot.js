@@ -129,6 +129,12 @@ export const TYPE_BY_TEMPLATE = {
   "Partner current feelings": "partner_feelings",
   "Spiritual journey reading": "spiritual_journey",
   "This month for you": "this_month",
+  // mapped to the closest authored section so these also use combined.md content:
+  "Aapka union kab hoga": "life_partner",
+  "Aapka aaj ka din kaisa hoga": "this_month",
+  "Your partner's next action": "partner_feelings",
+  "Relationship past, present, future": "partner_feelings",
+  "Universe guidance": "spiritual_journey",
 };
 export const TYPE_LABELS = {
   third_party: "Third party situation",
@@ -142,7 +148,9 @@ export const TYPE_LABELS = {
 };
 export const LANGS = [
   { id: "hinglish", label: "Hinglish" },
-  { id: "english", label: "English" },
+  { id: "en-in", label: "EN-IN" },
+  { id: "en-us", label: "EN-US" },
+  { id: "en-uk", label: "EN-UK" },
   { id: "hindi", label: "हिंदी" },
 ];
 export const typeForQuestion = (text) => TYPE_BY_TEMPLATE[(text || "").trim()] || null;
