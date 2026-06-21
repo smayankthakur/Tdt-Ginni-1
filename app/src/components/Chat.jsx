@@ -53,6 +53,7 @@ export default function Chat({ name, onChangeIdentity }) {
     const until = await restoreEntitlement();
     if (until) setPremiumUntil(until);
     setPremiumState(isPremium()); setLocked(!canAsk());
+    return isPremium();
   };
 
   const ask = (question, type) => {

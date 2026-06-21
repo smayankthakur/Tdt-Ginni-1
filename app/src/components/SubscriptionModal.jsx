@@ -5,6 +5,7 @@ import { supabaseEnabled, sendEmailOtp, verifyEmailOtp, currentEmail } from "../
 // paying user can use Premium on any device.
 export default function SubscriptionModal({
   open, onClose, onSubscribe, onSignedIn, premium, daysLeft = 0, busy = false, error = "",
+  autoLaunchOnLogin = true,
 }) {
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -27,8 +28,19 @@ export default function SubscriptionModal({
     try {
       await verifyEmailOtp(email.trim(), otp.trim());
       const e = await currentEmail();
-      setAuthMsg(`Signed in${e ? " as " + e : ""}. ✨`);
-      onSignedIn && (await onSignedIn());
+      // Restore any existing entitlement first; onSignedIn (refreshAccess)
+      // returns whether this account is already Premium.
+      const alreadyPremium = onSignedIn ? await onSignedIn() : false;
+      if (alreadyPremium) {
+        setAuthMsg(`Signed in${e ? " as " + e : ""}. Premium restored ✨`);
+      } else if (autoLaunchOnLogin && onSubscribe) {
+        // Auto-launch checkout right after login so the subscription is tied to
+        // this authenticated account — no second click on Subscribe needed.
+        setAuthMsg(`Signed in${e ? " as " + e : ""}. Opening checkout… ✨`);
+        onSubscribe();
+      } else {
+        setAuthMsg(`Signed in${e ? " as " + e : ""}. ✨`);
+      }
     } catch (e) { setAuthMsg("Invalid or expired code."); }
     finally { setAuthBusy(false); }
   };
