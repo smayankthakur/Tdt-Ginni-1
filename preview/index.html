@@ -13386,16 +13386,18 @@ body{margin:0;font-family:'Inter',system-ui,sans-serif;color:hsl(var(--foregroun
   async function sendEmailOtp(email) {
     const sb = await getSupabase();
     if (!sb) throw new Error("Auth not configured");
-    const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+    const emailRedirectTo = typeof window !== "undefined" ? window.location.origin : void 0;
+    const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo } });
     if (error) throw error;
     return true;
   }
   async function verifyEmailOtp(email, token) {
     const sb = await getSupabase();
     if (!sb) throw new Error("Auth not configured");
-    const { data, error } = await sb.auth.verifyOtp({ email, token, type: "email" });
-    if (error) throw error;
-    return data.session;
+    let res = await sb.auth.verifyOtp({ email, token, type: "email" });
+    if (res.error) res = await sb.auth.verifyOtp({ email, token, type: "signup" });
+    if (res.error) throw res.error;
+    return res.data.session;
   }
   async function restoreEntitlement() {
     const sb = await getSupabase();

@@ -5,13 +5,32 @@
 > **service-role** key are server-only — set them in Supabase, never with a
 > `VITE_` prefix.
 
-## 1. Supabase — Auth
+## 1. Supabase — Auth  (fixes: OTP code + correct redirect)
 
 Authentication → Providers:
-- Enable **Email** (Email OTP / magic link).
-- Enable **Anonymous sign-ins** (the app signs every visitor in anonymously so
-  usage is tracked per account with zero friction; they can later attach an email
-  to keep Premium across devices).
+- Enable **Email** and **Anonymous sign-ins**.
+- **Turn OFF "Confirm email"** (Email provider settings) so OTP login works
+  without a separate confirmation step.
+
+Authentication → **URL Configuration** (this is what was wrong — it pointed to
+`localhost:3000`):
+- **Site URL** = your production URL, e.g. `https://your-app.vercel.app`
+- **Redirect URLs** (allowlist) — add all you use:
+  `https://your-app.vercel.app`, `https://your-app.vercel.app/*`,
+  `http://localhost:5173`, `http://localhost:5500`
+
+Authentication → **Email Templates** — to receive a **6-digit OTP** instead of a
+magic link, edit **both** "Confirm signup" and "Magic Link" templates to include
+the token. Minimal body:
+```
+Your Ginni Ki Baatein code is: {{ .Token }}
+```
+(Leave `{{ .ConfirmationURL }}` out, or keep it as a fallback link — with the
+code present, the in-app "6-digit code" field works.)
+
+> The app also passes `emailRedirectTo = window.location.origin`, so even if a
+> user clicks the link it returns to your real app (not localhost) and the
+> session is picked up automatically.
 
 ## 2. Supabase — Database
 
