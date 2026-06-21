@@ -1,0 +1,50 @@
+===========================================================================
+[1/3] SECRETS set on project agwpfisykktphrrmnnzu  (authoritative)
+---------------------------------------------------------------------------
+Expect to see: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_PLAN_ID,
+  RAZORPAY_TOTAL_COUNT, RAZORPAY_WEBHOOK_SECRET, and (for tarot-chat)
+  LOVABLE_API_KEY or OPENAI_API_KEY. Optional: DAILY_LIMIT, ALLOWED_ORIGIN.
+  SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are auto-provided (may not list).
+---------------------------------------------------------------------------
+[?25l[90m|[39m
+[35m•[39m  Fetching secrets[1G[J[?25h
+  
+   NAME                      | DIGEST                                                           
+  ---------------------------|------------------------------------------------------------------
+   ALLOWED_ORIGIN            | c2e4a43b293f9b658fa493332b92e4178cbd0d43e0dbb4f54cd8276e00f7790e 
+   OPENAI_API_KEY            | ec645c46d313712eb057c0bdd8c259406b5d0050e4d07463aebc897f1dc4f4d0 
+   RAZORPAY_KEY_ID           | b94158f5982ccc37b058498e98750a9c53e46ed16adb0cb22c10ef93508252b9 
+   RAZORPAY_KEY_SECRET       | cd2eb0837c9b4c962c22d2ff8b5441b7b45805887f051d39bf133b583baf6860 
+   RAZORPAY_PLAN_ID          | 193c98d7f21533e1d582b104c9fe0b5c7c20d80c8085e8ea547a5501274420a2 
+   RAZORPAY_TOTAL_COUNT      | 6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918 
+   RAZORPAY_WEBHOOK_SECRET   | f76979e4e80a1be932f11129c48c91dd047620c6b967c42e7dbffbb3e841ed79 
+   SUPABASE_ANON_KEY         | ecc9fb0613dd80ed254cce7bbebd23e245a1344065fce0526e4b670c329c9d1c 
+   SUPABASE_DB_URL           | f4cee703a0dc4750e4145f4b867db59fd6a31e50e84c3dcc674df3e09dc3f3d3 
+   SUPABASE_JWKS             | 30d3b93023907b5f06908cdcc54f279cfd92233dac43639a701807e6523b5aeb 
+   SUPABASE_PUBLISHABLE_KEYS | f468d2a19b4b330e055e02786d037591aaf61f87391b8b97b17be8c2cb2aa3a2 
+   SUPABASE_SECRET_KEYS      | 5e81c98365eb5b438bc8e295fdd9b5170858c3e45dfa29ea7192d60472e34c87 
+   SUPABASE_SERVICE_ROLE_KEY | cd51d3200228e8cdf5aa590650d0c6b33791c767b9f23eccc4c00985caf29ea3 
+   SUPABASE_URL              | 2047413921f1fee3cce9231079aea17b4c9ada3c353f4c748b4aa1ad81ebb71f 
+
+
+===========================================================================
+[2/3] LIVE PROBE: razorpay-webhook   (no auth / no key needed)
+---------------------------------------------------------------------------
+  HTTP 401 "invalid signature" = RAZORPAY_WEBHOOK_SECRET IS set  (good)
+  HTTP 500 "not configured"    = RAZORPAY_WEBHOOK_SECRET is MISSING
+---------------------------------------------------------------------------
+invalid signature
+HTTP 401
+
+===========================================================================
+[3/3] LIVE PROBE: create-razorpay-subscription
+---------------------------------------------------------------------------
+  HTTP 401 auth_required  = Razorpay key/secret/plan ARE set  (good)
+  HTTP 500 "not configured" = RAZORPAY_KEY_ID/SECRET/PLAN_ID MISSING
+  HTTP 401 "Missing authorization header" = needs anon key (set ANON above)
+---------------------------------------------------------------------------
+Probing without anon key (gateway may block before the function runs)...
+{"code":"UNAUTHORIZED_NO_AUTH_HEADER","message":"Missing authorization header"}
+HTTP 401
+
+DONE.
