@@ -1,9 +1,9 @@
 // Razorpay subscription checkout (frontend).
-// Real checkout runs only when VITE_RAZORPAY_KEY_ID + a backend are configured.
-// Otherwise returns { incubated:true } so the caller grants 30-day access
-// directly — the app NEVER breaks if Razorpay isn't set up yet.
-
-import { getDeviceId } from "./rateLimit";
+// Calls the edge functions with the signed-in user's token so the subscription
+// is tied to their account (create-razorpay-subscription tags notes.user_id;
+// verify-razorpay-payment + the webhook store entitlement per user).
+// Falls back to an incubated 30-day grant when Razorpay isn't configured.
+import { getToken } from "./auth";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -17,12 +17,13 @@ export function razorpayConfigured() {
 }
 
 async function callFn(name, body) {
-  const url = `${FN_BASE}/${name}`;
-  const r = await fetch(url, {
+  const token = await getToken();
+  const r = await fetch(`${FN_BASE}/${name}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...(ANON ? { Authorization: `Bearer ${ANON}`, apikey: ANON } : {}),
+      ...(ANON ? { apikey: ANON } : {}),
+      ...(token || ANON ? { Authorization: `Bearer ${token || ANON}` } : {}),
     },
     body: JSON.stringify(body || {}),
   });
@@ -51,8 +52,7 @@ export async function startSubscription({ name } = {}) {
   if (!razorpayConfigured()) return { incubated: true };
 
   await loadCheckout();
-  const deviceId = getDeviceId();
-  const { subscription_id, key_id } = await callFn("create-razorpay-subscription", { name, deviceId });
+  const { subscription_id, key_id } = await callFn("create-razorpay-subscription", { name });
   if (!subscription_id) throw new Error("Could not create subscription");
 
   return new Promise((resolve, reject) => {
@@ -65,7 +65,7 @@ export async function startSubscription({ name } = {}) {
       prefill: name ? { name } : {},
       handler: async (resp) => {
         try {
-          const v = await callFn("verify-razorpay-payment", { ...resp, deviceId });
+          const v = await callFn("verify-razorpay-payment", resp);
           if (v && v.valid) resolve({ success: true, premiumUntil: v.premiumUntil });
           else reject(new Error("Payment could not be verified"));
         } catch (e) {

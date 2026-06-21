@@ -1,11 +1,10 @@
 // Supabase Edge Function: verify-razorpay-payment
-// Verifies the Razorpay subscription payment signature, then stores the premium
-// window for the device (aligned to the subscription's real billing end when
-// available, else +30 days). Returns premiumUntil (epoch ms) for the client.
+// Verifies the Razorpay subscription payment signature, then stores the access
+// window for the AUTHENTICATED user (so it persists across devices after login).
+// Deploy WITH JWT verification ON.
 //
-// Signature = HMAC_SHA256(razorpay_payment_id + "|" + razorpay_subscription_id, KEY_SECRET).
-// Env: RAZORPAY_KEY_SECRET (required), RAZORPAY_KEY_ID (to look up current_end),
-//      ALLOWED_ORIGIN, SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY (to persist access).
+// Secrets: RAZORPAY_KEY_SECRET (required), RAZORPAY_KEY_ID (to read current_end),
+//          SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY (auto).
 
 const ALLOWED_ORIGIN = Deno.env.get("ALLOWED_ORIGIN") || "*";
 const SB_URL = Deno.env.get("SUPABASE_URL");
@@ -18,11 +17,17 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Vary": "Origin",
 };
-
-function toHex(buf: ArrayBuffer) {
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+const toHex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+function uidFromAuth(req: Request): string | null {
+  const h = req.headers.get("Authorization") || "";
+  const m = h.match(/^Bearer (.+)$/);
+  if (!m) return null;
+  try {
+    let p = m[1].split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (p.length % 4) p += "=";
+    return JSON.parse(atob(p)).sub || null;
+  } catch (_) { return null; }
 }
-
 async function subscriptionEndMs(subId: string): Promise<number | null> {
   const keyId = Deno.env.get("RAZORPAY_KEY_ID");
   const secret = Deno.env.get("RAZORPAY_KEY_SECRET");
@@ -33,26 +38,16 @@ async function subscriptionEndMs(subId: string): Promise<number | null> {
     });
     if (!r.ok) return null;
     const d = await r.json();
-    const end = d.current_end || d.charge_at || d.end_at; // unix seconds
+    const end = d.current_end || d.charge_at || d.end_at;
     return end ? end * 1000 : null;
-  } catch (_) {
-    return null;
-  }
+  } catch (_) { return null; }
 }
-
-async function persist(deviceId: string, premiumUntilMs: number) {
-  if (!SB_URL || !SB_SERVICE || !deviceId) return;
-  await fetch(`${SB_URL}/rest/v1/ginni_access?on_conflict=device_id`, {
+async function persist(userId: string, untilMs: number, subId: string) {
+  if (!SB_URL || !SB_SERVICE || !userId) return;
+  await fetch(`${SB_URL}/rest/v1/ginni_access?on_conflict=user_id`, {
     method: "POST",
-    headers: {
-      apikey: SB_SERVICE,
-      Authorization: `Bearer ${SB_SERVICE}`,
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=minimal",
-    },
-    body: JSON.stringify([
-      { device_id: deviceId, premium_until: new Date(premiumUntilMs).toISOString(), updated_at: new Date().toISOString() },
-    ]),
+    headers: { apikey: SB_SERVICE, Authorization: `Bearer ${SB_SERVICE}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify([{ user_id: userId, premium_until: new Date(untilMs).toISOString(), subscription_id: subId, updated_at: new Date().toISOString() }]),
   });
 }
 
@@ -64,31 +59,19 @@ Deno.serve(async (req) => {
   try {
     const secret = Deno.env.get("RAZORPAY_KEY_SECRET");
     if (!secret) return json({ valid: false, error: "RAZORPAY_KEY_SECRET not set" }, 500);
+    const uid = uidFromAuth(req);
+    if (!uid) return json({ valid: false, error: "auth_required" }, 401);
 
-    const { razorpay_payment_id, razorpay_subscription_id, razorpay_signature, deviceId } = await req.json();
+    const { razorpay_payment_id, razorpay_subscription_id, razorpay_signature } = await req.json();
     if (!razorpay_payment_id || !razorpay_subscription_id || !razorpay_signature) {
       return json({ valid: false, error: "Missing payment fields" }, 400);
     }
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const sig = toHex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${razorpay_payment_id}|${razorpay_subscription_id}`)));
+    if (sig !== razorpay_signature) return json({ valid: false });
 
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const sigBuf = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      new TextEncoder().encode(`${razorpay_payment_id}|${razorpay_subscription_id}`)
-    );
-    const valid = toHex(sigBuf) === razorpay_signature;
-    if (!valid) return json({ valid: false });
-
-    // Align access to the real billing cycle when possible; else 30 days.
     const end = (await subscriptionEndMs(razorpay_subscription_id)) || Date.now() + 30 * DAY_MS;
-    if (deviceId) await persist(deviceId, end);
-
+    await persist(uid, end, razorpay_subscription_id);
     return json({ valid: true, premiumUntil: end });
   } catch (err) {
     return json({ valid: false, error: String(err) }, 400);

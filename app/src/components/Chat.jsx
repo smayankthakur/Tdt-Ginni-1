@@ -8,8 +8,11 @@ import CardPicker from "./CardPicker";
 import { welcomeMessage, SPREADS, LANGS, typeForQuestion } from "../data/tarot";
 import { buildReading } from "../lib/readingBuilder";
 import { startSubscription } from "../lib/razorpay";
+import { gateReading } from "../lib/serverGate";
+import { ensureSession, restoreEntitlement } from "../lib/auth";
 import {
-  canAsk, recordAsk, remaining, isPremium, grantPremium, premiumDaysLeft, setPremiumUntil,
+  canAsk, recordAsk, remaining, isPremium, grantPremium, premiumDaysLeft,
+  setPremiumUntil, syncFromServer, markLimitReached, todayLocal,
 } from "../lib/rateLimit";
 
 const STARTERS = [
@@ -23,7 +26,7 @@ export default function Chat({ name, onChangeIdentity }) {
   const [messages, setMessages] = useState([{ role: "ginni", text: welcomeMessage(name) }]);
   const [spread, setSpread] = useState(3);
   const [busy, setBusy] = useState(false);
-  const [picker, setPicker] = useState(null); // { question, type, count, positions }
+  const [picker, setPicker] = useState(null);
   const [showPlans, setShowPlans] = useState(false);
   const [locked, setLocked] = useState(!canAsk());
   const [premium, setPremiumState] = useState(isPremium());
@@ -33,9 +36,25 @@ export default function Chat({ name, onChangeIdentity }) {
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, picker]);
-  const chooseLang = (id) => { setLang(id); localStorage.setItem("ginni_lang", id); };
 
-  // Step 1: question chosen -> open the interactive card picker.
+  // Sign in (anonymous) + restore Premium across devices after login.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      await ensureSession();
+      const until = await restoreEntitlement();
+      if (alive && until) { setPremiumUntil(until); setPremiumState(isPremium()); setLocked(!canAsk()); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const chooseLang = (id) => { setLang(id); localStorage.setItem("ginni_lang", id); };
+  const refreshAccess = async () => {
+    const until = await restoreEntitlement();
+    if (until) setPremiumUntil(until);
+    setPremiumState(isPremium()); setLocked(!canAsk());
+  };
+
   const ask = (question, type) => {
     if (busy || picker) return;
     if (!canAsk()) { setLocked(true); setShowPlans(true); return; }
@@ -43,27 +62,37 @@ export default function Chat({ name, onChangeIdentity }) {
     setPicker({ question, type: type ?? typeForQuestion(question), count: def.count, positions: def.positions });
   };
 
-  // Step 2: user picked the cards -> reveal the reading.
-  const onPicked = (cards) => {
+  const onPicked = async (cards) => {
     const { question, type, positions } = picker;
     setPicker(null);
     setMessages((m) => [...m, { role: "user", text: question }, { role: "ginni", pending: true, count: cards.length }]);
     setBusy(true);
-    setTimeout(() => {
-      try {
-        // thread the user's `question` through so detectType + guidanceFor can use it
-        const reading = buildReading({ type, cards, positions, lang, name, question });
-        recordAsk();
-        setMessages((m) => { const n = [...m]; n[n.length - 1] = { role: "ginni", reading }; return n; });
-      } catch (e) {
-        setMessages((m) => { const n = [...m]; n[n.length - 1] = { role: "ginni", text: `Kshama kijiye, ${name} — thodi der baad phir poochhiye. 🌙` }; return n; });
-      } finally {
-        setBusy(false);
-        setLocked(!canAsk());
-        setPremiumState(isPremium());
-        if (!isPremium() && remaining() === 0) setTimeout(() => setShowPlans(true), 700);
+    const replaceLast = (msg) => setMessages((m) => { const n = [...m]; n[n.length - 1] = msg; return n; });
+    let hitLimit = false;
+    try {
+      const gate = await gateReading(todayLocal());
+      if (gate.unconfigured) {
+        if (!canAsk()) { hitLimit = true; markLimitReached(); }
+      } else if (gate.allowed === false) {
+        hitLimit = true; syncFromServer(gate); markLimitReached();
       }
-    }, 650);
+      if (hitLimit) {
+        replaceLast({ role: "ginni", text: `${name}, aaj ki readings poori ho gayi hain. 30 days full access ke saath unlimited guidance paayiye. 🌙` });
+      } else {
+        if (gate.premiumUntil) setPremiumUntil(gate.premiumUntil);
+        const reading = buildReading({ type, cards, positions, lang, name, question });
+        if (gate.unconfigured) recordAsk();
+        else if (typeof gate.remaining === "number" || gate.premiumUntil) syncFromServer(gate);
+        replaceLast({ role: "ginni", reading });
+      }
+    } catch (e) {
+      replaceLast({ role: "ginni", text: `Kshama kijiye, ${name} — thodi der baad phir poochhiye. 🌙` });
+    } finally {
+      setBusy(false);
+      setLocked(!canAsk());
+      setPremiumState(isPremium());
+      if (hitLimit || (!isPremium() && remaining() === 0)) setTimeout(() => setShowPlans(true), 700);
+    }
   };
 
   const activatePremium = (until) => {
@@ -142,16 +171,11 @@ export default function Chat({ name, onChangeIdentity }) {
 
       <Composer spread={spread} setSpread={setSpread} onSend={ask} locked={locked || busy || !!picker} />
 
-      <CardPicker
-        open={!!picker}
-        count={picker?.count || 3}
-        onComplete={onPicked}
-        onCancel={() => setPicker(null)}
-      />
+      <CardPicker open={!!picker} count={picker?.count || 3} onComplete={onPicked} onCancel={() => setPicker(null)} />
 
       <SubscriptionModal
         open={showPlans} premium={premium} daysLeft={daysLeft} busy={subscribing} error={subError}
-        onClose={() => setShowPlans(false)} onSubscribe={handleSubscribe}
+        onClose={() => setShowPlans(false)} onSubscribe={handleSubscribe} onSignedIn={refreshAccess}
       />
     </div>
   );
