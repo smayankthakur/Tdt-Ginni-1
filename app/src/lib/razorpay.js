@@ -52,7 +52,11 @@ export async function startSubscription({ name } = {}) {
   if (!razorpayConfigured()) return { incubated: true };
 
   await loadCheckout();
-  const { subscription_id, key_id } = await callFn("create-razorpay-subscription", { name });
+  const created = await callFn("create-razorpay-subscription", { name });
+  // Already-premium user: server skipped creating a duplicate subscription —
+  // just restore their access instead of opening checkout again.
+  if (created.already_active) return { success: true, premiumUntil: created.premiumUntil };
+  const { subscription_id, key_id } = created;
   if (!subscription_id) throw new Error("Could not create subscription");
 
   return new Promise((resolve, reject) => {
@@ -66,8 +70,12 @@ export async function startSubscription({ name } = {}) {
       handler: async (resp) => {
         try {
           const v = await callFn("verify-razorpay-payment", resp);
-          if (v && v.valid) resolve({ success: true, premiumUntil: v.premiumUntil });
-          else reject(new Error("Payment could not be verified"));
+          if (v && v.valid) {
+            // Payment verified. If the server couldn't persist the entitlement,
+            // the webhook is the backstop, but warn so the failure isn't silent.
+            if (v.persisted === false) console.warn("Payment verified but entitlement not saved server-side (persisted:false).");
+            resolve({ success: true, premiumUntil: v.premiumUntil });
+          } else reject(new Error("Payment could not be verified"));
         } catch (e) {
           reject(e);
         }

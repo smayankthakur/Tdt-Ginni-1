@@ -43,6 +43,28 @@ Deno.serve(async (req) => {
     if (!uid) return json({ error: "auth_required" }, 401);
     const { name } = await req.json().catch(() => ({}));
 
+    // Duplicate guard: if this user already has active premium, don't create a
+    // second (billable) Razorpay subscription — just hand back the existing
+    // entitlement so the client can restore premium instead of opening checkout.
+    const sbUrl = Deno.env.get("SUPABASE_URL");
+    const sbService = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (sbUrl && sbService) {
+      try {
+        const r = await fetch(
+          `${sbUrl}/rest/v1/ginni_access?user_id=eq.${uid}&select=premium_until,subscription_id`,
+          { headers: { apikey: sbService, Authorization: `Bearer ${sbService}` } },
+        );
+        if (r.ok) {
+          const rows = await r.json().catch(() => []);
+          const row = Array.isArray(rows) && rows.length ? rows[0] : null;
+          const untilMs = row?.premium_until ? new Date(row.premium_until).getTime() : 0;
+          if (untilMs > Date.now()) {
+            return json({ already_active: true, premiumUntil: untilMs, subscription_id: row?.subscription_id ?? null });
+          }
+        }
+      } catch (_) { /* non-fatal — fall through and create a fresh subscription */ }
+    }
+
     const auth = "Basic " + btoa(`${keyId}:${keySecret}`);
     const res = await fetch("https://api.razorpay.com/v1/subscriptions", {
       method: "POST",

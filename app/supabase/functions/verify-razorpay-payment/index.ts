@@ -42,13 +42,20 @@ async function subscriptionEndMs(subId: string): Promise<number | null> {
     return end ? end * 1000 : null;
   } catch (_) { return null; }
 }
-async function persist(userId: string, untilMs: number, subId: string) {
-  if (!SB_URL || !SB_SERVICE || !userId) return;
-  await fetch(`${SB_URL}/rest/v1/ginni_access?on_conflict=user_id`, {
+async function persist(userId: string, untilMs: number, subId: string): Promise<boolean> {
+  if (!SB_URL || !SB_SERVICE || !userId) return false;
+  const r = await fetch(`${SB_URL}/rest/v1/ginni_access?on_conflict=user_id`, {
     method: "POST",
     headers: { apikey: SB_SERVICE, Authorization: `Bearer ${SB_SERVICE}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify([{ user_id: userId, premium_until: new Date(untilMs).toISOString(), subscription_id: subId, updated_at: new Date().toISOString() }]),
   });
+  if (!r.ok) {
+    // Payment is valid but the entitlement write failed — surface it instead of
+    // silently returning success (the webhook is the backstop for renewals).
+    console.error("verify-razorpay-payment: persist failed", r.status, await r.text().catch(() => ""));
+    return false;
+  }
+  return true;
 }
 
 Deno.serve(async (req) => {
@@ -71,8 +78,8 @@ Deno.serve(async (req) => {
     if (sig !== razorpay_signature) return json({ valid: false });
 
     const end = (await subscriptionEndMs(razorpay_subscription_id)) || Date.now() + 30 * DAY_MS;
-    await persist(uid, end, razorpay_subscription_id);
-    return json({ valid: true, premiumUntil: end });
+    const persisted = await persist(uid, end, razorpay_subscription_id);
+    return json({ valid: true, premiumUntil: end, persisted });
   } catch (err) {
     return json({ valid: false, error: String(err) }, 400);
   }

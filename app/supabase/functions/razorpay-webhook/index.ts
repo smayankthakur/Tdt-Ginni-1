@@ -21,13 +21,18 @@ async function hmacHex(secret: string, body: string) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return toHex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
 }
-async function setPremium(userId: string, untilMs: number, subId?: string) {
-  if (!SB_URL || !SB_SERVICE || !userId) return;
-  await fetch(`${SB_URL}/rest/v1/ginni_access?on_conflict=user_id`, {
+async function setPremium(userId: string, untilMs: number, subId?: string): Promise<boolean> {
+  if (!SB_URL || !SB_SERVICE || !userId) return false;
+  const r = await fetch(`${SB_URL}/rest/v1/ginni_access?on_conflict=user_id`, {
     method: "POST",
     headers: { apikey: SB_SERVICE, Authorization: `Bearer ${SB_SERVICE}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
     body: JSON.stringify([{ user_id: userId, premium_until: new Date(untilMs).toISOString(), subscription_id: subId, updated_at: new Date().toISOString() }]),
   });
+  if (!r.ok) {
+    console.error("razorpay-webhook: setPremium failed", r.status, await r.text().catch(() => ""));
+    return false;
+  }
+  return true;
 }
 
 Deno.serve(async (req) => {

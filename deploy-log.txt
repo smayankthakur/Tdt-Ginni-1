@@ -3,7 +3,7 @@ v20.20.0
 
 [1/3] Checking Supabase login...
 [?25l[90m|[39m
-[35m•[39m  Fetching projects[1G[J[?25hCannot find project ref. Have you run supabase link?
+[?25hCannot find project ref. Have you run supabase link?
 
   
    LINKED | ORG ID                               | REFERENCE ID         | NAME                    | REGION                   | CREATED AT (UTC)    
@@ -21,7 +21,7 @@ Config OK: C:\Users\hp\Claude\Projects\tdt-ginni\ginni-replica\app\supabase\conf
 
 [3/3] Deploying functions to project agwpfisykktphrrmnnzu ...
 Bundling Function: tarot-chat
-Deploying Function: tarot-chat (script size: 5.302kB)
+No change found in Function: tarot-chat
 Deployed Functions on project agwpfisykktphrrmnnzu: tarot-chat
 You can inspect your deployment in the Dashboard: https://supabase.com/dashboard/project/agwpfisykktphrrmnnzu/functions
  tarot-chat exit: 0
@@ -31,17 +31,17 @@ Deployed Functions on project agwpfisykktphrrmnnzu: reading-gate
 You can inspect your deployment in the Dashboard: https://supabase.com/dashboard/project/agwpfisykktphrrmnnzu/functions
  reading-gate exit: 0
 Bundling Function: create-razorpay-subscription
-No change found in Function: create-razorpay-subscription
+Deploying Function: create-razorpay-subscription (script size: 3.135kB)
 Deployed Functions on project agwpfisykktphrrmnnzu: create-razorpay-subscription
 You can inspect your deployment in the Dashboard: https://supabase.com/dashboard/project/agwpfisykktphrrmnnzu/functions
  create-razorpay-subscription exit: 0
 Bundling Function: verify-razorpay-payment
-No change found in Function: verify-razorpay-payment
+Deploying Function: verify-razorpay-payment (script size: 3.555kB)
 Deployed Functions on project agwpfisykktphrrmnnzu: verify-razorpay-payment
 You can inspect your deployment in the Dashboard: https://supabase.com/dashboard/project/agwpfisykktphrrmnnzu/functions
  verify-razorpay-payment exit: 0
 Bundling Function: razorpay-webhook
-No change found in Function: razorpay-webhook
+Deploying Function: razorpay-webhook (script size: 2.848kB)
 Deployed Functions on project agwpfisykktphrrmnnzu: razorpay-webhook
 You can inspect your deployment in the Dashboard: https://supabase.com/dashboard/project/agwpfisykktphrrmnnzu/functions
  razorpay-webhook exit: 0
@@ -51,12 +51,12 @@ DONE. Listing deployed functions:
   
    ID                                   | NAME                         | SLUG                         | STATUS | VERSION | UPDATED_AT (UTC)    
   --------------------------------------|------------------------------|------------------------------|--------|---------|---------------------
-   aa5d93d5-63fb-4de7-824d-dac3830dea13 | dynamic-endpoint             | dynamic-endpoint             | ACTIVE | 13      | 2026-06-21 11:32:07 
-   2ed1ad76-bcec-480d-b3a5-81f932f40fac | swift-action                 | swift-action                 | ACTIVE | 11      | 2026-06-21 11:32:07 
-   2a74f919-498d-4c11-8542-aecc849316c8 | tarot-chat                   | tarot-chat                   | ACTIVE | 14      | 2026-06-21 16:50:36 
-   49c1a69c-6e81-427f-a0eb-d9623520b7a8 | rapid-function               | rapid-function               | ACTIVE | 5       | 2026-06-21 11:32:07 
-   117377b9-b274-4d24-8de8-2eebeaf348bb | reading-gate                 | reading-gate                 | ACTIVE | 4       | 2026-06-21 15:30:02 
-   498864d0-f229-42fc-a07f-4c5780e84c92 | create-razorpay-subscription | create-razorpay-subscription | ACTIVE | 4       | 2026-06-21 15:30:24 
-   8d74d1a8-5d87-4558-a03c-373a7dcc36a9 | verify-razorpay-payment      | verify-razorpay-payment      | ACTIVE | 4       | 2026-06-21 15:30:33 
-   847b8315-a401-4a4c-b487-214bf5501068 | razorpay-webhook             | razorpay-webhook             | ACTIVE | 4       | 2026-06-21 15:30:42 
+   aa5d93d5-63fb-4de7-824d-dac3830dea13 | dynamic-endpoint             | dynamic-endpoint             | ACTIVE | 15      | 2026-06-21 11:32:07 
+   2ed1ad76-bcec-480d-b3a5-81f932f40fac | swift-action                 | swift-action                 | ACTIVE | 13      | 2026-06-21 11:32:07 
+   2a74f919-498d-4c11-8542-aecc849316c8 | tarot-chat                   | tarot-chat                   | ACTIVE | 16      | 2026-06-21 16:50:36 
+   49c1a69c-6e81-427f-a0eb-d9623520b7a8 | rapid-function               | rapid-function               | ACTIVE | 7       | 2026-06-21 11:32:07 
+   117377b9-b274-4d24-8de8-2eebeaf348bb | reading-gate                 | reading-gate                 | ACTIVE | 6       | 2026-06-21 15:30:02 
+   498864d0-f229-42fc-a07f-4c5780e84c92 | create-razorpay-subscription | create-razorpay-subscription | ACTIVE | 7       | 2026-06-21 17:42:19 
+   8d74d1a8-5d87-4558-a03c-373a7dcc36a9 | verify-razorpay-payment      | verify-razorpay-payment      | ACTIVE | 7       | 2026-06-21 17:42:29 
+   847b8315-a401-4a4c-b487-214bf5501068 | razorpay-webhook             | razorpay-webhook             | ACTIVE | 7       | 2026-06-21 17:42:37 
 
