@@ -93,7 +93,10 @@ export default function ReadingFlow({ name, onChangeIdentity }) {
         }
         if (gate.unconfigured) recordAsk();
         else if (typeof gate.remaining === "number" || gate.premiumUntil) syncFromServer(gate);
-        replaceLast({ role: "ginni", reading });
+        // Render as plain text (GinniBody). The `reading` field routes to
+        // AuthoredReading, which expects a structured {blocks,...} object and
+        // crashes on a string — so pass our string via `text`.
+        replaceLast({ role: "ginni", text: reading });
       }
     } catch (e) {
       replaceLast({ role: "ginni", text: `Kshama kijiye, ${name} — thodi der baad phir poochhiye. 🌙` });
