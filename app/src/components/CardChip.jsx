@@ -9,8 +9,8 @@ export default function CardChip({ card, position }) {
   const src = sources[idx];
 
   return (
-    <div className="flex w-20 shrink-0 flex-col items-center gap-1">
-      <div className="relative h-28 w-20 overflow-hidden rounded-lg border border-gold/30 bg-card-grad shadow-gold">
+    <div className="flex w-40 shrink-0 flex-col items-center gap-1">
+      <div className="relative h-56 w-40 overflow-hidden rounded-xl border border-gold/30 bg-card-grad shadow-gold">
         {src ? (
           <img
             src={src}
@@ -20,12 +20,12 @@ export default function CardChip({ card, position }) {
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center p-1 text-center font-serif text-[11px] leading-tight text-gold">
+          <div className="flex h-full w-full items-center justify-center p-2 text-center font-serif text-sm leading-tight text-gold">
             {card.name}
           </div>
         )}
       </div>
-      <div className="text-center text-[10px]">
+      <div className="text-center text-xs">
         <div className="font-medium text-gold">{position}</div>
       </div>
     </div>

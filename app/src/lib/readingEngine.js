@@ -154,6 +154,29 @@ export async function getReadingByCard(topicKey, cardName, lang = "hinglish") {
   return { card: cardName, topic: topicKey, text, fallback };
 }
 
+// Languages a card entry actually contains for a topic. Empty = single-language
+// (unlabeled) — that card can't switch, so it's ignored when resolving a spread.
+export async function languagesFor(topicKey, cardName) {
+  const raw = ((await loadFile(topicMeta(topicKey).file))[cardName] || "").trim();
+  const s = cleanArtifacts(raw);
+  const ms = [...s.matchAll(/(^|\n)[ \t]*(Hinglish|English|Hindi\w*)[ \t]*(?::|(?=\r?\n)|$)/gi)];
+  const set = new Set();
+  for (const m of ms) { const l = m[2].toLowerCase(); set.add(l.startsWith("hinglish") ? "hinglish" : l.startsWith("hindi") ? "hindi" : "english"); }
+  return [...set];
+}
+
+// Pick ONE language for a multi-card spread so all cards read uniformly: the
+// preferred language if every labeled card has it, else the best language common
+// to all of them (Hinglish → English → Hindi). Never translates.
+export async function resolveSpreadLang(topicKey, cardNames, preferred = "hinglish") {
+  const lists = await Promise.all(cardNames.map((c) => languagesFor(topicKey, c)));
+  const labeled = lists.filter((l) => l.length);
+  if (!labeled.length) return preferred;
+  const common = (L) => labeled.every((l) => l.includes(L));
+  if (common(preferred)) return preferred;
+  return ["hinglish", "english", "hindi"].find(common) || preferred;
+}
+
 /**
  * Grounded reading for a picked number (1..78) under one intent.
  * @returns {Promise<{card, number, topic, text, fallback:boolean}>}
