@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ginni — Reading Flow Demo</title>
+<style>
+  :root { --bg:#140f1c; --card:#1e1830; --gold:#f5a623; --fg:#efe9f7; --muted:#a99fc0; --line:#322a47; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:radial-gradient(1200px 600px at 50% -10%, #241a3a, var(--bg)); color:var(--fg); min-height:100vh; }
+  .wrap { max-width:640px; margin:0 auto; padding:28px 18px 60px; }
+  h1 { font-size:22px; color:var(--gold); text-align:center; margin:6px 0 2px; }
+  .sub { text-align:center; color:var(--muted); font-size:13px; margin-bottom:22px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; margin-bottom:14px; }
+  .step-label { font-size:11px; letter-spacing:.18em; color:var(--muted); text-transform:uppercase; margin-bottom:10px; }
+  button { font:inherit; cursor:pointer; }
+  .opt { display:block; width:100%; text-align:left; background:#241d38; color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:11px 14px; margin:7px 0; transition:.15s; }
+  .opt:hover { border-color:var(--gold); }
+  .opt small { color:var(--muted); display:block; margin-top:2px; }
+  .grp { font-size:11px; color:var(--gold); margin:14px 0 4px; letter-spacing:.1em; text-transform:uppercase; }
+  .row { display:flex; gap:8px; }
+  input[type=number] { flex:1; background:#241d38; border:1px solid var(--line); color:var(--fg); border-radius:10px; padding:11px 14px; font-size:16px; }
+  .primary { background:linear-gradient(135deg,#f5a623,#e0791f); color:#1a1206; font-weight:700; border:none; border-radius:10px; padding:11px 18px; }
+  .ghost { background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:10px; padding:9px 14px; }
+  .card-name { font-size:20px; color:var(--gold); margin:2px 0 10px; }
+  .reading { white-space:pre-wrap; line-height:1.6; font-size:15px; }
+  .flag { font-size:12px; color:var(--muted); margin-top:12px; border-top:1px dashed var(--line); padding-top:10px; }
+  .err { color:#ff8a8a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🌌 Ginni</h1>
+  <div class="sub">One-card, document-grounded reading · demo of the locked flow</div>
+  <div id="app"><div class="panel">Loading deck…</div></div>
+</div>
+<script>
+const KB = "ginni-kb/";
+let INDEX = null, chosenTopic = null;
+const app = document.getElementById("app");
+const cache = {};
+async function load(file){ if(cache[file])return cache[file]; const r=await fetch(KB+file); if(!r.ok)throw new Error(file+" "+r.status); return cache[file]=await r.json(); }
+
+function topicLabel(k){ const t=INDEX.topics.find(x=>x.key===k); return t?t.label:k; }
+
+async function start(){
+  try { INDEX = await load("index.json"); } catch(e){ app.innerHTML='<div class="panel err">Could not load knowledge base. Run via the dev server (npm run dev) and open /ginni-reading-demo.html — file:// blocks fetch.</div>'; return; }
+  renderTopics();
+}
+
+function renderTopics(){
+  chosenTopic=null;
+  const friendly = {
+    soulmate:"Soulmate kab milega", life_partner:"Life partner kab milega", shaadi:"Shaadi kab hogi",
+    baby:"Baby kab hoga", union:"Union kab hoga", third_party_end:"Third-party situation kab end hogi",
+    partner_feelings:"Partner's current feelings", partner_action:"Partner's action",
+    connection:"Connection type — Twin Flame / Soulmate / Karmic", monthly:"Monthly prediction — Career · Love · Health · Studies",
+    relationship_ppf:"Relationship — Past / Present / Future (one card)", yes_no:"Yes / No", universe_guidance:"Universe guidance",
+  };
+  const order = ["soulmate","life_partner","shaadi","baby","union","third_party_end","partner_feelings","partner_action","connection","monthly","relationship_ppf","yes_no","universe_guidance"];
+  let html = '<div class="panel"><div class="step-label">Step 1 · Topic</div>'
+    + '<div style="margin-bottom:6px">Namaste. Aap kis vishay par reading lena chahenge? <b>Har reading sirf ek card ki hogi.</b></div>';
+  let lastGroup="";
+  for(const k of order){
+    const ti = INDEX.topics.find(x=>x.key===k); if(!ti) continue;
+    const grp = ({soulmate:"Timing",life_partner:"Timing",shaadi:"Timing",baby:"Timing",union:"Timing",third_party_end:"Timing"})[k] || "";
+    if(grp && grp!==lastGroup){ html+='<div class="grp">'+grp+'</div>'; lastGroup=grp; }
+    if(!grp) lastGroup="";
+    html += `<button class="opt" onclick="pickTopic('${k}')">${friendly[k]||ti.label}<small>${ti.cards}/78 cards in source</small></button>`;
+  }
+  html += '</div>';
+  app.innerHTML = html;
+}
+
+window.pickTopic = function(k){
+  chosenTopic = k;
+  app.innerHTML = '<div class="panel"><div class="step-label">Step 2 · Draw</div>'
+    + `<div style="margin-bottom:6px">Topic: <b>${topicLabel(k)}</b></div>`
+    + '<div style="margin-bottom:12px">Maine deck shuffle karke 78 cards face-down spread kar diye hain. Apni situation par dhyaan dijiye aur <b>1 se 78</b> ke beech ek number chuniye.</div>'
+    + '<div class="row"><input id="num" type="number" min="1" max="78" placeholder="1–78" /><button class="primary" onclick="reveal()">Reveal</button></div>'
+    + '<div id="msg" class="flag"></div>'
+    + '<div style="margin-top:12px"><button class="ghost" onclick="renderTopics()">← Change topic</button></div></div>';
+  document.getElementById("num").focus();
+  document.getElementById("num").addEventListener("keydown",e=>{ if(e.key==="Enter") reveal(); });
+};
+
+window.reveal = async function(){
+  const n = parseInt(document.getElementById("num").value,10);
+  const msg = document.getElementById("msg");
+  if(!(n>=1 && n<=78)){ msg.innerHTML='<span class="err">Please pick a number between 1 and 78.</span>'; return; }
+  const card = INDEX.deck[n-1];
+  msg.textContent = "Revealing…";
+  let kb, text="", fallback=false;
+  try { kb = await load(chosenTopic+".json"); text=(kb[card]||"").trim(); } catch(e){ msg.innerHTML='<span class="err">'+e.message+'</span>'; return; }
+  if(!text){ fallback=true; try{ const ug=await load("universe_guidance.json"); text=(ug[card]||"").trim(); }catch(e){} }
+  if(!text){ text="Is card ke liye is topic mein abhi reading available nahi hai — ek aur number chuniye. ✨"; fallback=true; }
+  app.innerHTML = '<div class="panel"><div class="step-label">Step 3 · Reading</div>'
+    + `<div style="color:var(--muted);font-size:13px">Aapka number: <b>${n}</b></div>`
+    + `<div class="card-name">Aapka card: ${card}</div>`
+    + `<div class="reading">${text.replace(/</g,"&lt;")}</div>`
+    + (fallback ? '<div class="flag">⚠ Is card ki is-topic entry source mein nahi thi — Universe Guidance se grounded fallback dikhaya gaya.</div>' : '')
+    + '<div style="margin-top:16px" class="row"><button class="primary" onclick="renderTopics()">New reading</button></div></div>';
+};
+
+start();
+</script>
+</body>
+</html>
