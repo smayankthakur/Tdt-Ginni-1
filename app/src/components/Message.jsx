@@ -127,6 +127,11 @@ export default function Message({ msg, name }) {
           <CardShuffle count={msg.count || 3} />
         ) : msg.reading ? (
           <AuthoredReading reading={msg.reading} name={name} />
+        ) : msg.cards?.length ? (
+          <div className="space-y-3">
+            <CardStrip blocks={msg.cards} />
+            <GinniBody text={msg.text} />
+          </div>
         ) : (
           <GinniBody text={msg.text} />
         )}

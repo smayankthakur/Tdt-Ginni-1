@@ -82,6 +82,36 @@ function yesnoParse(raw) {
   return { verdict: m[1].trim(), guidance: m[2].trim() };
 }
 
+// Strip Word export junk ("Top of Form" / "Bottom of Form") that leaked into the docs.
+function cleanArtifacts(s) {
+  return s.split("\n").filter((l) => !/^\s*(top|bottom)\s+of\s+(the\s+)?form\s*$/i.test(l)).join("\n").trim();
+}
+
+export const LANGUAGES = [
+  { id: "hinglish", label: "Hinglish" },
+  { id: "english", label: "English" },
+  { id: "hindi", label: "हिंदी" },
+];
+
+// Many entries hold three language blocks: "Hinglish:… English:… Hindi:…". Return
+// only the requested one (fallback Hinglish → English → first). Single-language
+// entries (no labels) are returned cleaned, unchanged.
+export function extractLanguage(raw, lang = "hinglish") {
+  const s = cleanArtifacts(raw || "");
+  const re = /(^|\n)\s*(Hinglish|English|Hindi|HINDI)\s*:/g;
+  const ms = [...s.matchAll(re)];
+  if (!ms.length) return s;
+  const blocks = {};
+  for (let i = 0; i < ms.length; i++) {
+    const key = ms[i][2].toLowerCase() === "hindi" ? "hindi" : ms[i][2].toLowerCase();
+    const start = ms[i].index + ms[i][0].length;
+    const end = i + 1 < ms.length ? ms[i + 1].index : s.length;
+    blocks[key] = s.slice(start, end).trim();
+  }
+  const want = (lang || "hinglish").toLowerCase();
+  return blocks[want] || blocks.hinglish || blocks.english || Object.values(blocks)[0] || s;
+}
+
 export function cardForNumber(number) {
   const n = Math.floor(Number(number));
   if (!Number.isFinite(n) || n < 1 || n > 78) return null;
@@ -93,7 +123,7 @@ export function cardForNumber(number) {
  * Guidance when the intent has no entry for that card (or the file is missing).
  * @returns {Promise<{card, topic, text, fallback:boolean}>}
  */
-export async function getReadingByCard(topicKey, cardName) {
+export async function getReadingByCard(topicKey, cardName, lang = "hinglish") {
   if (!cardName) throw new Error("No card drawn.");
   const meta = topicMeta(topicKey);
   let raw = (await loadFile(meta.file))[cardName];
@@ -108,12 +138,14 @@ export async function getReadingByCard(topicKey, cardName) {
     return { card: cardName, topic: topicKey, text: `Is card (${cardName}) ki reading abhi available nahi hai — ek aur card draw kijiye. ✨`, fallback: true };
   }
 
-  let text = raw;
+  let text;
   if (!fallback && meta.mode === "yesno") {
     const { verdict, guidance } = yesnoParse(raw);
     text = guidance ? `${verdict} — ${guidance}` : verdict;
   } else if (!fallback && meta.mode === "yesno_verdict") {
     text = yesnoParse(raw).verdict;
+  } else {
+    text = extractLanguage(raw, lang); // pick the requested language + strip artifacts
   }
   return { card: cardName, topic: topicKey, text, fallback };
 }
@@ -122,9 +154,9 @@ export async function getReadingByCard(topicKey, cardName) {
  * Grounded reading for a picked number (1..78) under one intent.
  * @returns {Promise<{card, number, topic, text, fallback:boolean}>}
  */
-export async function getReading(topicKey, number) {
+export async function getReading(topicKey, number, lang = "hinglish") {
   const card = cardForNumber(number);
   if (!card) throw new Error("Please pick a number between 1 and 78.");
-  const r = await getReadingByCard(topicKey, card);
+  const r = await getReadingByCard(topicKey, card, lang);
   return { ...r, number: Math.floor(Number(number)) };
 }

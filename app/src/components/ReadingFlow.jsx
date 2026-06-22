@@ -4,7 +4,7 @@ import StarField from "./StarField";
 import Message from "./Message";
 import CardPicker from "./CardPicker";
 import SubscriptionModal from "./SubscriptionModal";
-import { getReadingByCard, classifyTopic, cardCountFor } from "../lib/readingEngine";
+import { getReadingByCard, classifyTopic, cardCountFor, TOPICS, LANGUAGES } from "../lib/readingEngine";
 import { startSubscription } from "../lib/razorpay";
 import { gateReading } from "../lib/serverGate";
 import { ensureSession, restoreEntitlement } from "../lib/auth";
@@ -24,6 +24,8 @@ export default function ReadingFlow({ name, onChangeIdentity }) {
   const [subscribing, setSubscribing] = useState(false);
   const [subError, setSubError] = useState("");
   const [q, setQ] = useState("");
+  const [lang, setLang] = useState(() => localStorage.getItem("ginni_lang") || "hinglish");
+  const chooseLang = (id) => { setLang(id); localStorage.setItem("ginni_lang", id); };
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, picker]);
@@ -56,6 +58,13 @@ export default function ReadingFlow({ name, onChangeIdentity }) {
     setPicker({ topicKey, label: text, count: cardCountFor(topicKey) });
   };
 
+  // Click an intent chip → draw for that intent directly (no typing needed).
+  const pickIntent = (t) => {
+    if (busy || picker) return;
+    if (!canAsk()) { setShowPlans(true); return; }
+    setPicker({ topicKey: t.key, label: t.label, count: t.count || 1 });
+  };
+
   // One card drawn → grounded reading from the knowledge base.
   const onPicked = async (cards) => {
     const topic = picker;
@@ -76,27 +85,28 @@ export default function ReadingFlow({ name, onChangeIdentity }) {
         replaceLast({ role: "ginni", text: `${name}, aaj ki readings poori ho gayi hain. 30 days full access ke saath unlimited guidance paayiye. 🌙` });
       } else {
         if (gate.premiumUntil) setPremiumUntil(gate.premiumUntil);
-        let reading;
+        let reading, cardObjs;
         if ((topic.count || 1) >= 3) {
           // Relationship: 3-card Past / Present / Future, each from the doc.
           const labels = ["Past", "Present", "Future"];
           const parts = [];
+          cardObjs = [];
           for (let i = 0; i < drawn.length; i++) {
-            const r = await getReadingByCard(topic.topicKey, drawn[i]);
+            const r = await getReadingByCard(topic.topicKey, drawn[i], lang);
             parts.push(`${labels[i] || "Card " + (i + 1)} — ${drawn[i]}\n${r.text}`);
+            cardObjs.push({ card: drawn[i], position: labels[i] || "" });
           }
           reading = parts.join("\n\n");
         } else {
-          const { card: cname, text, fallback } = await getReadingByCard(topic.topicKey, drawn[0]);
-          const note = fallback ? "\n\n— (Universe Guidance se grounded reading)" : "";
-          reading = `Aapka card: ${cname}\n\n${text}${note}`;
+          const { card: cname, text, fallback } = await getReadingByCard(topic.topicKey, drawn[0], lang);
+          const note = fallback ? "\n\n— (Universe Guidance)" : "";
+          reading = `${text}${note}`;
+          cardObjs = [{ card: cname, position: cname }];
         }
         if (gate.unconfigured) recordAsk();
         else if (typeof gate.remaining === "number" || gate.premiumUntil) syncFromServer(gate);
-        // Render as plain text (GinniBody). The `reading` field routes to
-        // AuthoredReading, which expects a structured {blocks,...} object and
-        // crashes on a string — so pass our string via `text`.
-        replaceLast({ role: "ginni", text: reading });
+        // Card image(s) via `cards`, reading text via `text` (GinniBody).
+        replaceLast({ role: "ginni", cards: cardObjs, text: reading });
       }
     } catch (e) {
       replaceLast({ role: "ginni", text: `Kshama kijiye, ${name} — thodi der baad phir poochhiye. 🌙` });
@@ -138,6 +148,14 @@ export default function ReadingFlow({ name, onChangeIdentity }) {
           </div>
         </div>
         <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center rounded-full border border-border bg-secondary/50 p-0.5">
+            {LANGUAGES.map((l) => (
+              <button key={l.id} onClick={() => chooseLang(l.id)}
+                className={`rounded-full px-2.5 py-1 text-[11px] transition ${lang === l.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+                {l.label}
+              </button>
+            ))}
+          </div>
           <button onClick={onChangeIdentity} className="hidden text-muted-foreground transition hover:text-foreground sm:inline">Change identity</button>
           <button onClick={() => setShowPlans(true)}
             className="rounded-full bg-gold-grad px-3 py-1.5 text-[12px] font-semibold text-primary-foreground shadow-gold transition hover:brightness-105">
@@ -159,7 +177,16 @@ export default function ReadingFlow({ name, onChangeIdentity }) {
         </div>
       </main>
 
-      <div className="relative z-10 border-t border-border px-4 py-3 backdrop-blur">
+      <div className="relative z-10 border-t border-border px-4 pt-2 pb-3 backdrop-blur">
+        {/* 15 intent chips — tap one to draw directly */}
+        <div className="no-scrollbar mx-auto mb-2 flex max-w-3xl gap-2 overflow-x-auto pb-1">
+          {TOPICS.map((t) => (
+            <button key={t.key} onClick={() => pickIntent(t)} disabled={busy || !!picker}
+              className="shrink-0 whitespace-nowrap rounded-full border border-border bg-secondary/40 px-3 py-1.5 text-[12px] text-foreground/90 transition hover:border-gold/40 disabled:opacity-40">
+              {t.label}
+            </button>
+          ))}
+        </div>
         <div className="mx-auto flex max-w-3xl gap-2">
           <input
             value={q}
