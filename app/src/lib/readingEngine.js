@@ -98,15 +98,18 @@ export const LANGUAGES = [
 // entries (no labels) are returned cleaned, unchanged.
 export function extractLanguage(raw, lang = "hinglish") {
   const s = cleanArtifacts(raw || "");
-  const re = /(^|\n)\s*(Hinglish|English|Hindi|HINDI)\s*:/g;
+  // Match the language labels exactly as the source docs write them, incl. the
+  // stray "Hindiq:" typo. We only SLICE the existing text — never translate.
+  const re = /(^|\n)\s*(Hinglish|English|Hindi\w*)\s*:/gi;
   const ms = [...s.matchAll(re)];
-  if (!ms.length) return s;
+  if (!ms.length) return s; // single-language entry → return file text as-is
   const blocks = {};
   for (let i = 0; i < ms.length; i++) {
-    const key = ms[i][2].toLowerCase() === "hindi" ? "hindi" : ms[i][2].toLowerCase();
+    const lab = ms[i][2].toLowerCase();
+    const key = lab.startsWith("hinglish") ? "hinglish" : lab.startsWith("hindi") ? "hindi" : "english";
     const start = ms[i].index + ms[i][0].length;
     const end = i + 1 < ms.length ? ms[i + 1].index : s.length;
-    blocks[key] = s.slice(start, end).trim();
+    blocks[key] = (s.slice(start, end).trim() || blocks[key] || "");
   }
   const want = (lang || "hinglish").toLowerCase();
   return blocks[want] || blocks.hinglish || blocks.english || Object.values(blocks)[0] || s;
