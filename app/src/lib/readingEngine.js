@@ -98,9 +98,10 @@ export const LANGUAGES = [
 // entries (no labels) are returned cleaned, unchanged.
 export function extractLanguage(raw, lang = "hinglish") {
   const s = cleanArtifacts(raw || "");
-  // Match the language labels exactly as the source docs write them, incl. the
-  // stray "Hindiq:" typo. We only SLICE the existing text — never translate.
-  const re = /(^|\n)\s*(Hinglish|English|Hindi\w*)\s*:/gi;
+  // Match the language labels in BOTH styles the docs use: "Hinglish: …" (colon,
+  // content on the same line) and "Hinglish⏎…" (label alone on its own line).
+  // Includes the stray "Hindiq:" typo. We only SLICE existing text — never translate.
+  const re = /(^|\n)[ \t]*(Hinglish|English|Hindi\w*)[ \t]*(?::|(?=\r?\n)|$)/gi;
   const ms = [...s.matchAll(re)];
   if (!ms.length) return s; // single-language entry → return file text as-is
   const blocks = {};
