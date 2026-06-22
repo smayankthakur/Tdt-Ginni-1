@@ -96,18 +96,25 @@ export const LANGUAGES = [
 // Many entries hold three language blocks: "Hinglish:… English:… Hindi:…". Return
 // only the requested one (fallback Hinglish → English → first). Single-language
 // entries (no labels) are returned cleaned, unchanged.
+// Language labels in every style the docs use: Latin "Hinglish/English/Hindi(q)"
+// (with or without a colon, label on its own line or inline) AND the Devanagari
+// "हिंदी" label. We only SLICE existing text by these labels — never translate.
+const LANG_LABEL = "(Hinglish|English|Hindi\\w*|हिंदी|हिन्दी|हिंग्लिश|हिंगलिश|इंग्लिश)";
+const langLabelRe = () => new RegExp("(^|\\n)[ \\t]*" + LANG_LABEL + "[ \\t]*(?::|(?=\\r?\\n)|$)", "gi");
+function langKey(lab) {
+  const l = (lab || "").toLowerCase();
+  if (l.startsWith("hinglish") || /हिंग/.test(lab)) return "hinglish";
+  if (l.startsWith("hindi") || /हिंदी|हिन्दी/.test(lab)) return "hindi";
+  return "english";
+}
+
 export function extractLanguage(raw, lang = "hinglish") {
   const s = cleanArtifacts(raw || "");
-  // Match the language labels in BOTH styles the docs use: "Hinglish: …" (colon,
-  // content on the same line) and "Hinglish⏎…" (label alone on its own line).
-  // Includes the stray "Hindiq:" typo. We only SLICE existing text — never translate.
-  const re = /(^|\n)[ \t]*(Hinglish|English|Hindi\w*)[ \t]*(?::|(?=\r?\n)|$)/gi;
-  const ms = [...s.matchAll(re)];
+  const ms = [...s.matchAll(langLabelRe())];
   if (!ms.length) return s; // single-language entry → return file text as-is
   const blocks = {};
   for (let i = 0; i < ms.length; i++) {
-    const lab = ms[i][2].toLowerCase();
-    const key = lab.startsWith("hinglish") ? "hinglish" : lab.startsWith("hindi") ? "hindi" : "english";
+    const key = langKey(ms[i][2]);
     const start = ms[i].index + ms[i][0].length;
     const end = i + 1 < ms.length ? ms[i + 1].index : s.length;
     blocks[key] = (s.slice(start, end).trim() || blocks[key] || "");
@@ -159,9 +166,8 @@ export async function getReadingByCard(topicKey, cardName, lang = "hinglish") {
 export async function languagesFor(topicKey, cardName) {
   const raw = ((await loadFile(topicMeta(topicKey).file))[cardName] || "").trim();
   const s = cleanArtifacts(raw);
-  const ms = [...s.matchAll(/(^|\n)[ \t]*(Hinglish|English|Hindi\w*)[ \t]*(?::|(?=\r?\n)|$)/gi)];
   const set = new Set();
-  for (const m of ms) { const l = m[2].toLowerCase(); set.add(l.startsWith("hinglish") ? "hinglish" : l.startsWith("hindi") ? "hindi" : "english"); }
+  for (const m of s.matchAll(langLabelRe())) set.add(langKey(m[2]));
   return [...set];
 }
 
