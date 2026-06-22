@@ -3,33 +3,53 @@
 Designed against the uploaded knowledge base and the four user complaints
 (information overload, conflicting timelines, context mismatch, no interactivity).
 
-> **LOCKED DESIGN — "blend" (2026-06-22):** strictly **one card per reading** for
-> every topic. The **Relationship** topic still returns Past/Present/Future, but
-> from that **single drawn card's own paragraph** — never a 3-card spread. This
-> keeps the no-contradiction guarantee while preserving a PPF narrative.
+> **CANONICAL ROUTING (2026-06-22, updated):** 15 fixed intents, each answered
+> from ONE source file (see §4). All intents draw **one card** EXCEPT
+> **Relationship — Past/Present/Future**, which draws **3 cards** (one per
+> timeline). **Yes/No** has two variants off the same file: *with guidance*
+> (verdict + guidance line) and *direct* (verdict only). **Daily** has no valid
+> source file yet (legacy `.doc`) so it falls back to Universe Guidance until
+> re-saved as `.docx`.
 >
 > **Implemented in this build (deterministic, zero-LLM grounding):**
-> - `app/public/ginni-kb/*.json` — one file per topic (card → verbatim text),
->   plus `index.json` (canonical 78-card deck + per-topic coverage).
-> - `app/src/lib/readingEngine.js` — `cardForNumber()` + `getReading(topic, n)`;
->   maps the picked number → card, returns the document text, falls back to
->   Universe Guidance for any missing {topic, card}. No LLM call, so hallucination
->   is structurally impossible.
-> - `app/public/ginni-reading-demo.html` — runnable demo of the full flow (open
->   `/ginni-reading-demo.html` under `npm run dev`).
+> - `app/public/ginni-kb/*.json` — one file per source doc (card → verbatim text),
+>   plus `index.json` (canonical 78-card deck + per-topic coverage). Note: there is
+>   no `daily.json` (source still legacy `.doc`); Yes/No Direct and Yes/No with
+>   Guidance both read `yes_no.json`.
+> - `app/src/lib/readingEngine.js` — the 15-intent catalogue `TOPICS` (each with
+>   `file`, `count`, `mode`), plus: `classifyTopic(text)` (free-text question →
+>   intent key), `cardCountFor(key)`, `getReadingByCard(topic, card)` and
+>   `getReading(topic, n)`. Resolves intent → source file, applies the render mode
+>   (Yes/No verdict vs verdict+guidance), and falls back to Universe Guidance for
+>   any missing `{intent, card}` or missing file. No LLM call → hallucination is
+>   structurally impossible.
+> - `app/src/components/ReadingFlow.jsx` — the production home: a **free-text
+>   input** (no pre-set prompt buttons) → `classifyTopic` → draw via `CardPicker`
+>   (1 card, or 3 for Relationship) → grounded reveal. Reuses the daily gate +
+>   premium/subscription logic. Mounted by `App.jsx`.
+> - `app/public/ginni-reading-demo.html` — standalone number-pick demo, updated to
+>   the full 15 intents incl. the 3-card Relationship and Yes/No verdict modes
+>   (open `/ginni-reading-demo.html` under `npm run dev`). `ReadingFlow.jsx` remains
+>   the production source of truth (free-text + visual draw); the demo is the
+>   number-pick illustration of the same engine.
 
 ## How each complaint is fixed
 
 | Complaint | Fix in this design |
 |---|---|
-| Information overload | One card only; no "guidance" pile-up — a single opening line, the card's topic text, and its one Guidance line. |
-| Conflicting logic (3 timelines) | One card → one timeline. Multi-card spreads are removed at the architecture level, so contradictions are structurally impossible. |
-| Context mismatch (daily → PPF) | Topic is classified first; the agent is forbidden from wrapping any question in Past/Present/Future. Daily questions map to the daily entry, not a spread. |
-| No interactivity | A hard pause: the agent shuffles, asks the user to pick a number 1–78, and only reveals after the user replies. |
+| Information overload | One card for every intent (short, focused reading). Relationship is the single deliberate 3-card exception. |
+| Conflicting logic (3 timelines) | Each single-card intent gives exactly one answer/timeline. Only Relationship draws 3 cards, and those map cleanly to Past/Present/Future positions. |
+| Context mismatch (daily → PPF) | The typed question is classified to one intent first; Past/Present/Future is never forced — it applies only to the explicit Relationship intent. |
+| No interactivity | The user types their question, then draws face-down card(s) from the shuffled deck (`CardPicker`) before the reveal. |
 
 ---
 
 ## 1. Revised architecture — 2-step flow
+
+> **Note on delivery:** the **live app** uses a *free-text* home → `classifyTopic`
+> → a *visual* `CardPicker` draw (1 card, or 3 for Relationship). The number-pick
+> flow drawn below is the equivalent interaction used by the optional LLM prompt
+> (§2) and the standalone demo — same 2-step shape, same card mapping (§3).
 
 ```
 ┌─ STEP 1 · ASK & DRAW ───────────────────────────────┐
@@ -65,18 +85,18 @@ fresh Step 1 → Step 2 cycle (new draw).
 >
 > **ABSOLUTE RULES**
 >
-> 1. **ONE CARD ONLY.** Every reading uses exactly one card — including the
->    Relationship reading, where the single drawn card's own text already covers
->    Past, Present and Future. Never use a 3-card, 5-card, or Celtic Cross spread,
->    and never draw a separate card per timeline. If the querent asks for "more
->    cards" or a spread, gently say each reading is a single focused card, and
->    continue with one.
+> 1. **ONE CARD per intent — except Relationship.** Every intent draws exactly
+>    one card, EXCEPT **Relationship — Past/Present/Future**, which draws **three**
+>    (one card each for Past, Present, Future). Never use 5-card or Celtic Cross
+>    spreads. For any single-card intent, if the querent asks for "more cards,"
+>    gently say it is a single focused card and continue with one.
 > 2. **INTERACTIVE DRAW — TWO STEPS, ALWAYS PAUSE.**
->    - *Step 1 (Ask & Draw):* Greet, confirm the ONE topic, then say the deck is
+>    - *Step 1 (Ask & Draw):* Greet, confirm the ONE intent, then say the deck is
 >      shuffled and spread face-down and ask them to pick a number **between 1 and
->      78**. **STOP. Reveal no card and no reading. Wait for their number.**
->    - *Step 2 (Reveal):* When they give a number, map it to its card and reveal
->      the reading for **that card, in that topic only**.
+>      78** (for **Relationship**, ask for **three** numbers). **STOP. Reveal
+>      nothing. Wait for their number(s).**
+>    - *Step 2 (Reveal):* Map each number to its card and reveal the reading for
+>      that card in that intent only (Relationship → Past / Present / Future).
 > 3. **STRICTLY GROUNDED — ZERO HALLUCINATION.** Use only the interpretation text
 >    provided from the knowledge base for the chosen {topic, card}. Never invent
 >    meanings and never use traditional/outside tarot knowledge. If no entry
@@ -90,14 +110,15 @@ fresh Step 1 → Step 2 cycle (new draw).
 >    revealed; the topic-specific interpretation as written; and the card's
 >    Guidance line. No extra sections, no padded summaries.
 > 6. **NO FORCED FRAMEWORKS.** Never wrap a simple or daily question ("aaj ka din
->    kaisa hoga") in Past/Present/Future. Past/Present/Future appears only when the
->    querent explicitly chooses the **Relationship** topic — and even then it is
->    one card's paragraph, never a multi-card spread.
+>    kaisa hoga") in Past/Present/Future. Past/Present/Future applies only to the
+>    **Relationship** intent (its 3-card spread); every other intent answers its
+>    own question directly with one card.
 >
-> **TOPICS (choose exactly one per reading):** Timing (soulmate / life partner /
-> shaadi / baby / union / third-party-end), Partner's Current Feelings, Partner's
-> Action, Connection Type (Twin Flame / Soulmate / Karmic), Monthly Prediction,
-> Yes/No, Universe Guidance, Daily.
+> **INTENTS (pick exactly one — the canonical 15 are in §4):** Yes/No with
+> Guidance, Yes/No Direct, Daily, Union, Third-Party Resolution, Marriage, Life
+> Partner, Baby, Soulmate, Partner's Current Feelings, Spiritual Journey, Monthly
+> Prediction, Universe Guidance, Partner's Action, and Relationship —
+> Past/Present/Future (the only 3-card intent).
 >
 > **OUTPUT FORMAT**
 > - 1–2 line warm opening using the querent's name.
@@ -109,9 +130,14 @@ fresh Step 1 → Step 2 cycle (new draw).
 > - End with the card's **Guidance / Universe Guidance** line.
 > - **Monthly only:** present *Month · Career · Love · Health · Studies ·
 >   Guidance* (+ lucky number, lucky colour) exactly as provided.
+> - **Relationship only:** three cards labelled **Past / Present / Future**, each
+>   with its own card's paragraph.
+> - **Yes/No:** *with guidance* = verdict + guidance line; *direct* = verdict only
+>   (YES / NO / MAYBE–WAIT).
 >
-> **NEVER:** reveal the card before the querent picks a number; output more than
-> one card; give two timelines; add meanings not present in the source text.
+> **NEVER:** reveal the card(s) before the querent picks; output more cards than
+> the intent calls for (one, or three for Relationship); give conflicting
+> timelines for a single-card intent; add meanings not present in the source text.
 
 ---
 
@@ -131,49 +157,50 @@ are written in):
 - **51–64 Swords:** Ace → Ten, Page, Knight, Queen, King
 - **65–78 Pentacles:** Ace → Ten, Page, Knight, Queen, King
 
-> **Implementation note:** make this 78-card list the single source of truth in
-> code, and look the card name up inside the topic document. One of the Yes/No
-> files appears to skip *The Lovers* in its sequence — validate each document's
-> card list against this canonical order at build time, and fall back to Universe
-> Guidance for any card a document is missing, so a mismatch never produces a
-> wrong or empty reading.
+> **Implementation note:** this 78-card list is the single source of truth in code
+> (`DECK` in `readingEngine.js`); card names are looked up inside each intent's KB
+> file. Both Yes/No files parse to full 78/78 coverage; other files range 64–77/78
+> (per-topic counts are in `index.json`). Any missing `{intent, card}` falls back
+> to Universe Guidance, so a gap never produces a wrong or empty reading.
 
 ---
 
-## 4. Topic → source document
+## 4. Canonical 15-intent mapping
 
-| Topic option | Document |
-|---|---|
-| Timing — soulmate | `APKO SOULMATE KAB MILEGA.docx` |
-| Timing — life partner | `APKO APKA LIFEPARTNER KABMILEGA.docx` |
-| Timing — shaadi | `Apki shaadi kab hogi.docx` |
-| Timing — baby | `APKO BABY KAB HOGA.docx` |
-| Timing — union | `Apka union kab hoga.docx` |
-| Timing — third-party end | `APKI LIFE SE THIRD PARTY SITUATION KAB END HOGI.docx` |
-| Partner's Current Feelings | `Partner Current Feelings ... (Final Draft).docx` |
-| Partner's Action | `your partner action.done.docx` |
-| Connection Type (Twin Flame/Soulmate/Karmic) | `spiritual journey of all cards done.docx` |
-| Monthly Prediction | `This month for you all language done.docx` |
-| Yes/No (+ Guidance) | `78 CARDS YES NO NEW.WITH GUIDIANCE.docx` |
-| Universe Guidance | `universe guidance.docx` |
-| Relationship snapshot | `your relationship past present future.docx` (single-card narrative) |
-| Daily — "aaj ka din" | `Aapka aaj ka din kaisa hoga.docx` — ⚠ saved as legacy `.doc`, must be re-saved as `.docx` before it can be ingested |
+| # | Intent | Spread | KB key | Source document |
+|---|---|---|---|---|
+| 1 | Yes/No with Guidance | 1 card | `yes_no_guidance` | `78 CARDS YES NO NEW.WITH GUIDIANCE.docx` |
+| 2 | Yes/No Direct (verdict only) | 1 card | `yes_no_direct` | `78 CARDS YES NO NEW_.docx` (same content; rendered verdict-only) |
+| 3 | Daily Reading | 1 card | `daily` | `Aapka aaj ka din kaisa hoga.docx` ⚠ legacy `.doc` — not yet ingestible; falls back to Universe Guidance |
+| 4 | Union Timing | 1 card | `union` | `Apka union kab hoga.docx` |
+| 5 | Third-Party Resolution | 1 card | `third_party_end` | `APKI LIFE SE THIRD PARTY SITUATION KAB END HOGI.docx` |
+| 6 | Marriage Timing | 1 card | `shaadi` | `Apki shaadi kab hogi.docx` |
+| 7 | Life Partner Timing | 1 card | `life_partner` | `APKO APKA LIFEPARTNER KABMILEGA.docx` |
+| 8 | Pregnancy/Baby Timing | 1 card | `baby` | `APKO BABY KAB HOGA.docx` |
+| 9 | Soulmate Timing | 1 card | `soulmate` | `APKO SOULMATE KAB MILEGA.docx` |
+| 10 | Partner's Current Feelings | 1 card | `partner_feelings` | `Partner Current Feelings … (Final Draft).docx` |
+| 11 | Spiritual Journey | 1 card | `connection` | `spiritual journey of all cards done.docx` |
+| 12 | Monthly Prediction | 1 card | `monthly` | `This month for you all language done.docx` |
+| 13 | Universe Guidance | 1 card | `universe_guidance` | `universe guidance.docx` |
+| 14 | Partner's Action | 1 card | `partner_action` | `your partner action.done.docx` |
+| 15 | Relationship Dynamics (Past/Present/Future) | **3 cards** | `relationship_ppf` | `your relationship past present future.docx` |
 
 ---
 
 ## 5. Integration notes
 
-- **Retrieval pattern:** given `{topic, cardNumber}`, resolve the card name from
-  §3, fetch that card's block from the topic document (§4), and inject it into the
-  prompt as the only allowed source — e.g. a `{{KB_ENTRY}}` placeholder the
-  model must reproduce. This keeps "zero hallucination" enforceable.
-- **Where it plugs in:** this replaces the `SYSTEM_PROMPT` in
-  `app/supabase/functions/tarot-chat/index.ts` *if* you route readings through the
-  LLM. Note the current app builds readings client-side (`buildReading` in
-  `lib/readingBuilder.js`) and does not call `tarot-chat`; to use this agent you'd
-  switch the client back to `generateReading` (`lib/ginniClient.js`) and add the
-  card-pick pause in the UI (the `CardPicker` already provides the "draw"
-  interaction — wire its selected index to the number 1–78).
-- **Languages:** keep Hinglish as default; expose English/Hindi only where the
-  source document actually contains them (Monthly, timing files do; some files are
-  Hinglish-only).
+- **Implemented as deterministic retrieval — no LLM.** The live app never calls a
+  model. `readingEngine.js` resolves intent → source file (§4), maps the drawn
+  card to its KB entry, applies the render mode, and falls back to Universe
+  Guidance for any gap — so "zero hallucination" is guaranteed by construction,
+  not by a prompt.
+- **Where it lives:** `App.jsx` → `ReadingFlow.jsx` (free-text home) → `CardPicker`
+  (visual draw of 1 card, or 3 for Relationship) → `readingEngine`. The old LLM
+  path (`tarot-chat`, `buildReading`, `ginniClient`, `demoReading`) was removed in
+  this build; restore from git only if you deliberately want an LLM variant.
+- **Optional LLM variant:** §2 is a paste-ready system prompt for that case. Inject
+  the §4 file's card entry as a `{{KB_ENTRY}}` placeholder the model must reproduce
+  verbatim, and use the number-pick interaction (§1/§3) since a model can't render
+  the visual draw.
+- **Languages:** Hinglish default; English/Hindi only where the source document
+  actually contains them (Monthly + timing files do; some are Hinglish-only).

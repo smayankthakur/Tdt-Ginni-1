@@ -2,11 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import MoonLogo from "./MoonLogo";
 import StarField from "./StarField";
 import Message from "./Message";
-import Composer from "./Composer";
-import SubscriptionModal from "./SubscriptionModal";
 import CardPicker from "./CardPicker";
-import { welcomeMessage, SPREADS, LANGS, typeForQuestion } from "../data/tarot";
-import { buildReading } from "../lib/readingBuilder";
+import SubscriptionModal from "./SubscriptionModal";
+import { getReadingByCard, classifyTopic, cardCountFor } from "../lib/readingEngine";
 import { startSubscription } from "../lib/razorpay";
 import { gateReading } from "../lib/serverGate";
 import { ensureSession, restoreEntitlement } from "../lib/auth";
@@ -15,24 +13,17 @@ import {
   setPremiumUntil, syncFromServer, markLimitReached, todayLocal,
 } from "../lib/rateLimit";
 
-const STARTERS = [
-  "Aapki shaadi kab hogi",
-  "Aapko life partner kab milega",
-  "Partner current feelings",
-  "This month for you",
-];
-
-export default function Chat({ name, onChangeIdentity }) {
-  const [messages, setMessages] = useState([{ role: "ginni", text: welcomeMessage(name) }]);
-  const [spread, setSpread] = useState(3);
+export default function ReadingFlow({ name, onChangeIdentity }) {
+  const [messages, setMessages] = useState([
+    { role: "ginni", text: `Namaste ${name}. 🌌 Apne dil ka sawaal likhiye — main deck shuffle karke aapke liye ek card nikalungi.` },
+  ]);
+  const [picker, setPicker] = useState(null); // { topicKey, label }
   const [busy, setBusy] = useState(false);
-  const [picker, setPicker] = useState(null);
   const [showPlans, setShowPlans] = useState(false);
-  const [locked, setLocked] = useState(!canAsk());
   const [premium, setPremiumState] = useState(isPremium());
   const [subscribing, setSubscribing] = useState(false);
   const [subError, setSubError] = useState("");
-  const [lang, setLang] = useState(localStorage.getItem("ginni_lang") || "hinglish");
+  const [q, setQ] = useState("");
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, picker]);
@@ -43,30 +34,34 @@ export default function Chat({ name, onChangeIdentity }) {
     (async () => {
       await ensureSession();
       const until = await restoreEntitlement();
-      if (alive && until) { setPremiumUntil(until); setPremiumState(isPremium()); setLocked(!canAsk()); }
+      if (alive && until) { setPremiumUntil(until); setPremiumState(isPremium()); }
     })();
     return () => { alive = false; };
   }, []);
 
-  const chooseLang = (id) => { setLang(id); localStorage.setItem("ginni_lang", id); };
   const refreshAccess = async () => {
     const until = await restoreEntitlement();
     if (until) setPremiumUntil(until);
-    setPremiumState(isPremium()); setLocked(!canAsk());
+    setPremiumState(isPremium());
     return isPremium();
   };
 
-  const ask = (question, type) => {
-    if (busy || picker) return;
-    if (!canAsk()) { setLocked(true); setShowPlans(true); return; }
-    const def = SPREADS[spread] || SPREADS[3];
-    setPicker({ question, type: type ?? typeForQuestion(question), count: def.count, positions: def.positions });
+  // User types a free-text question → classify to one topic → draw one card.
+  const askFree = () => {
+    const text = q.trim();
+    if (!text || busy || picker) return;
+    if (!canAsk()) { setShowPlans(true); return; }
+    setQ("");
+    const topicKey = classifyTopic(text);
+    setPicker({ topicKey, label: text, count: cardCountFor(topicKey) });
   };
 
+  // One card drawn → grounded reading from the knowledge base.
   const onPicked = async (cards) => {
-    const { question, type, positions } = picker;
+    const topic = picker;
     setPicker(null);
-    setMessages((m) => [...m, { role: "user", text: question }, { role: "ginni", pending: true, count: cards.length }]);
+    const drawn = (cards || []).map((c) => c.name);
+    setMessages((m) => [...m, { role: "user", text: topic.label }, { role: "ginni", pending: true, count: drawn.length || 1 }]);
     setBusy(true);
     const replaceLast = (msg) => setMessages((m) => { const n = [...m]; n[n.length - 1] = msg; return n; });
     let hitLimit = false;
@@ -81,7 +76,21 @@ export default function Chat({ name, onChangeIdentity }) {
         replaceLast({ role: "ginni", text: `${name}, aaj ki readings poori ho gayi hain. 30 days full access ke saath unlimited guidance paayiye. 🌙` });
       } else {
         if (gate.premiumUntil) setPremiumUntil(gate.premiumUntil);
-        const reading = buildReading({ type, cards, positions, lang, name, question });
+        let reading;
+        if ((topic.count || 1) >= 3) {
+          // Relationship: 3-card Past / Present / Future, each from the doc.
+          const labels = ["Past", "Present", "Future"];
+          const parts = [];
+          for (let i = 0; i < drawn.length; i++) {
+            const r = await getReadingByCard(topic.topicKey, drawn[i]);
+            parts.push(`${labels[i] || "Card " + (i + 1)} — ${drawn[i]}\n${r.text}`);
+          }
+          reading = parts.join("\n\n");
+        } else {
+          const { card: cname, text, fallback } = await getReadingByCard(topic.topicKey, drawn[0]);
+          const note = fallback ? "\n\n— (Universe Guidance se grounded reading)" : "";
+          reading = `Aapka card: ${cname}\n\n${text}${note}`;
+        }
         if (gate.unconfigured) recordAsk();
         else if (typeof gate.remaining === "number" || gate.premiumUntil) syncFromServer(gate);
         replaceLast({ role: "ginni", reading });
@@ -90,7 +99,6 @@ export default function Chat({ name, onChangeIdentity }) {
       replaceLast({ role: "ginni", text: `Kshama kijiye, ${name} — thodi der baad phir poochhiye. 🌙` });
     } finally {
       setBusy(false);
-      setLocked(!canAsk());
       setPremiumState(isPremium());
       if (hitLimit || (!isPremium() && remaining() === 0)) setTimeout(() => setShowPlans(true), 700);
     }
@@ -98,7 +106,7 @@ export default function Chat({ name, onChangeIdentity }) {
 
   const activatePremium = (until) => {
     if (until) setPremiumUntil(until); else grantPremium();
-    setPremiumState(true); setLocked(false); setShowPlans(false); setSubError("");
+    setPremiumState(true); setShowPlans(false); setSubError("");
   };
   const handleSubscribe = async () => {
     if (subscribing) return;
@@ -127,14 +135,6 @@ export default function Chat({ name, onChangeIdentity }) {
           </div>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <div className="hidden items-center rounded-full border border-border bg-secondary/50 p-0.5 sm:flex">
-            {LANGS.map((l) => (
-              <button key={l.id} onClick={() => chooseLang(l.id)}
-                className={`rounded-full px-2.5 py-1 text-[11px] transition ${lang === l.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                {l.label}
-              </button>
-            ))}
-          </div>
           <button onClick={onChangeIdentity} className="hidden text-muted-foreground transition hover:text-foreground sm:inline">Change identity</button>
           <button onClick={() => setShowPlans(true)}
             className="rounded-full bg-gold-grad px-3 py-1.5 text-[12px] font-semibold text-primary-foreground shadow-gold transition hover:brightness-105">
@@ -147,20 +147,6 @@ export default function Chat({ name, onChangeIdentity }) {
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
           {messages.map((m, i) => <Message key={i} msg={m} name={name} />)}
 
-          {messages.length === 1 && (
-            <div className="mt-1 gx-fade-up">
-              <div className="mb-2 text-[11px] tracking-[0.2em] text-muted-foreground">A STARTING POINT</div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {STARTERS.map((s) => (
-                  <button key={s} onClick={() => ask(s, typeForQuestion(s))} disabled={locked || busy || !!picker}
-                    className="rounded-2xl border border-border bg-secondary/40 px-4 py-2.5 text-left text-sm text-foreground/90 transition hover:border-gold/40 disabled:opacity-40">
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <p className="text-center text-xs text-muted-foreground/60">
             {premium ? `Premium access · ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining`
               : left > 0 ? `${left} free reading${left === 1 ? "" : "s"} remaining today`
@@ -170,9 +156,24 @@ export default function Chat({ name, onChangeIdentity }) {
         </div>
       </main>
 
-      <Composer spread={spread} setSpread={setSpread} onSend={ask} locked={locked || busy || !!picker} />
+      <div className="relative z-10 border-t border-border px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-3xl gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") askFree(); }}
+            placeholder="Apna sawaal likhiye… (e.g. meri shaadi kab hogi)"
+            disabled={busy || !!picker}
+            className="flex-1 rounded-full border border-border bg-input/60 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-gold/60 disabled:opacity-50"
+          />
+          <button onClick={askFree} disabled={busy || !!picker || !q.trim()}
+            className="rounded-full bg-gold-grad px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-gold transition hover:brightness-105 disabled:opacity-50">
+            Draw
+          </button>
+        </div>
+      </div>
 
-      <CardPicker open={!!picker} count={picker?.count || 3} onComplete={onPicked} onCancel={() => setPicker(null)} />
+      <CardPicker open={!!picker} count={picker?.count || 1} onComplete={onPicked} onCancel={() => setPicker(null)} />
 
       <SubscriptionModal
         open={showPlans} premium={premium} daysLeft={daysLeft} busy={subscribing} error={subError}

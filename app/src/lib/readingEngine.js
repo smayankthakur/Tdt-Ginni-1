@@ -1,13 +1,12 @@
-// Ginni Reading Engine — deterministic, document-grounded, ONE card per reading.
-// Locked design ("blend"): strictly 1-card for every topic; the Relationship
-// option returns the single drawn card's full Past/Present/Future paragraph.
-// Zero hallucination: text comes verbatim from the knowledge base in
-// /public/ginni-kb/. Missing {topic, card} falls back to Universe Guidance.
+// Ginni Reading Engine — deterministic, document-grounded.
+// Canonical 15-intent routing (see READING-AGENT-PROMPT.md). Each intent maps to
+// one source file; readings are pulled verbatim from the knowledge base in
+// /public/ginni-kb/ — NO LLM, so hallucination is structurally impossible.
+// All intents draw ONE card except Relationship (Past/Present/Future) = 3 cards.
 
 const BASE = (import.meta?.env?.BASE_URL || "/") + "ginni-kb/";
 
-// Canonical 78-card order (Majors, then Wands, Cups, Swords, Pentacles) — the
-// same order the source documents are written in. number (1..78) -> DECK[n-1].
+// Canonical 78-card order (Majors, then Wands, Cups, Swords, Pentacles).
 const MAJORS = [
   "The Fool", "The Magician", "The High Priestess", "The Empress", "The Emperor",
   "The Hierophant", "The Lovers", "The Chariot", "Strength", "The Hermit",
@@ -18,35 +17,71 @@ const SUITS = ["Wands", "Cups", "Swords", "Pentacles"];
 const RANKS = ["Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Page", "Knight", "Queen", "King"];
 export const DECK = [...MAJORS, ...SUITS.flatMap((s) => RANKS.map((r) => `${r} of ${s}`))];
 
-// Topic catalogue. `timing` topics all answer a "kab…" question; each maps to
-// one document file under /ginni-kb/.
+// The 15 intents. `file` = KB json under /ginni-kb/; `count` = cards drawn;
+// `mode` = render transform (yes/no verdict handling).
 export const TOPICS = [
-  { key: "soulmate", group: "timing", label: "Soulmate — kab milega" },
-  { key: "life_partner", group: "timing", label: "Life partner — kab milega" },
-  { key: "shaadi", group: "timing", label: "Shaadi — kab hogi" },
-  { key: "baby", group: "timing", label: "Baby — kab hoga" },
-  { key: "union", group: "timing", label: "Union — kab hoga" },
-  { key: "third_party_end", group: "timing", label: "Third-party situation — kab end hogi" },
-  { key: "partner_feelings", group: "feelings", label: "Partner's current feelings" },
-  { key: "partner_action", group: "feelings", label: "Partner's action" },
-  { key: "connection", group: "connection", label: "Connection type (Twin Flame / Soulmate / Karmic)" },
-  { key: "monthly", group: "monthly", label: "Monthly prediction (Career · Love · Health · Studies)" },
-  { key: "relationship_ppf", group: "relationship", label: "Relationship — Past / Present / Future (one card)" },
-  { key: "yes_no", group: "yesno", label: "Yes / No" },
-  { key: "universe_guidance", group: "guidance", label: "Universe guidance" },
+  { key: "yes_no_guidance", label: "Yes / No (with guidance)", file: "yes_no", count: 1, mode: "yesno" },
+  { key: "yes_no_direct", label: "Yes / No (direct)", file: "yes_no", count: 1, mode: "yesno_verdict" },
+  { key: "daily", label: "Aaj ka din kaisa hoga", file: "daily", count: 1 },
+  { key: "union", label: "Union — kab hoga", file: "union", count: 1 },
+  { key: "third_party_end", label: "Third-party situation — kab end hogi", file: "third_party_end", count: 1 },
+  { key: "shaadi", label: "Shaadi — kab hogi", file: "shaadi", count: 1 },
+  { key: "life_partner", label: "Life partner — kab milega", file: "life_partner", count: 1 },
+  { key: "baby", label: "Baby — kab hoga", file: "baby", count: 1 },
+  { key: "soulmate", label: "Soulmate — kab milega", file: "soulmate", count: 1 },
+  { key: "partner_feelings", label: "Partner's current feelings", file: "partner_feelings", count: 1 },
+  { key: "connection", label: "Spiritual journey (Twin Flame / Soulmate / Karmic)", file: "connection", count: 1 },
+  { key: "monthly", label: "Monthly prediction", file: "monthly", count: 1 },
+  { key: "universe_guidance", label: "Universe guidance", file: "universe_guidance", count: 1 },
+  { key: "partner_action", label: "Partner's action", file: "partner_action", count: 1 },
+  { key: "relationship_ppf", label: "Relationship — Past / Present / Future", file: "relationship_ppf", count: 3 },
 ];
+const TOPIC_BY_KEY = Object.fromEntries(TOPICS.map((t) => [t.key, t]));
+export function topicMeta(key) { return TOPIC_BY_KEY[key] || TOPIC_BY_KEY["universe_guidance"]; }
+export function cardCountFor(key) { return topicMeta(key).count || 1; }
 
-const _cache = {};
-async function loadTopic(key) {
-  if (_cache[key]) return _cache[key];
-  const res = await fetch(`${BASE}${key}.json`, { cache: "force-cache" });
-  if (!res.ok) throw new Error(`KB load failed for "${key}" (${res.status})`);
-  const data = await res.json();
-  _cache[key] = data;
-  return data;
+// Free-text question → one intent key. Specific phrases first, general last.
+const _CLASSIFY = [
+  ["daily", /aaj ka din|\btoday\b|din kaisa|aaj kaisa/i],
+  ["third_party_end", /third[\s-]?party|affair|interfere|interference|teesr/i],
+  ["baby", /\bbaby\b|pregnan|conceive|bach(?:a|cha)|santaan|aulad|garbh/i],
+  ["shaadi", /shaadi|marriage|married|vivah|byah/i],
+  ["soulmate", /soulmate/i],
+  ["union", /\bunion\b|milan|reunion|wapas|come ?back|reunite/i],
+  ["life_partner", /life ?partner|jeevansa?thi|partner kab|kab milega.*partner/i],
+  ["connection", /twin ?flame|karmic|spiritual journey|connection type|kis tarah ka connection/i],
+  ["monthly", /month|mahin|is mahine|career|studies|forecast/i],
+  ["partner_feelings", /feel|feeling|soch|dil mein|mann mein|kya sochta|kya soch rah/i],
+  ["partner_action", /action|kya kareg|next move|contact kareg|reach out|wapas aayega/i],
+  ["relationship_ppf", /past.*present.*future|relationship status|relationship dynamic|\bppf\b|rishta|relationship/i],
+  ["yes_no_guidance", /yes ?\/? ?no|haan ya nahi|will i|should i|kya .* hoga\??/i],
+  ["universe_guidance", /guidance|universe|advice|margdarshan|message/i],
+];
+export function classifyTopic(text) {
+  const t = (text || "").toLowerCase();
+  for (const [key, re] of _CLASSIFY) if (re.test(t)) return key;
+  return "universe_guidance";
 }
 
-// Map a user-picked number to its card. Strictly one number -> one card.
+const _cache = {};
+async function loadFile(file) {
+  if (_cache[file]) return _cache[file];
+  try {
+    const res = await fetch(`${BASE}${file}.json`, { cache: "force-cache" });
+    if (!res.ok) { _cache[file] = {}; return {}; }          // missing topic (e.g. daily) → empty → fallback
+    const data = await res.json();
+    _cache[file] = data;
+    return data;
+  } catch (_) { _cache[file] = {}; return {}; }
+}
+
+// Yes/No entries look like: "The Fool – YESGUIDEANCE - New beginning, leap of faith lo…"
+function yesnoParse(raw) {
+  const m = raw.match(/[–—-]\s*(.*?)\s*GUID[EI]ANCE\s*[-–—]?\s*([\s\S]*)$/i);
+  if (!m) return { verdict: raw, guidance: "" };
+  return { verdict: m[1].trim(), guidance: m[2].trim() };
+}
+
 export function cardForNumber(number) {
   const n = Math.floor(Number(number));
   if (!Number.isFinite(n) || n < 1 || n > 78) return null;
@@ -54,29 +89,42 @@ export function cardForNumber(number) {
 }
 
 /**
- * Reveal one grounded reading.
+ * Grounded reading for one card under one intent. Falls back to Universe
+ * Guidance when the intent has no entry for that card (or the file is missing).
+ * @returns {Promise<{card, topic, text, fallback:boolean}>}
+ */
+export async function getReadingByCard(topicKey, cardName) {
+  if (!cardName) throw new Error("No card drawn.");
+  const meta = topicMeta(topicKey);
+  let raw = (await loadFile(meta.file))[cardName];
+  raw = (raw || "").trim();
+  let fallback = false;
+
+  if (!raw) {
+    fallback = true;
+    raw = ((await loadFile("universe_guidance"))[cardName] || "").trim();
+  }
+  if (!raw) {
+    return { card: cardName, topic: topicKey, text: `Is card (${cardName}) ki reading abhi available nahi hai — ek aur card draw kijiye. ✨`, fallback: true };
+  }
+
+  let text = raw;
+  if (!fallback && meta.mode === "yesno") {
+    const { verdict, guidance } = yesnoParse(raw);
+    text = guidance ? `${verdict} — ${guidance}` : verdict;
+  } else if (!fallback && meta.mode === "yesno_verdict") {
+    text = yesnoParse(raw).verdict;
+  }
+  return { card: cardName, topic: topicKey, text, fallback };
+}
+
+/**
+ * Grounded reading for a picked number (1..78) under one intent.
  * @returns {Promise<{card, number, topic, text, fallback:boolean}>}
  */
 export async function getReading(topicKey, number) {
   const card = cardForNumber(number);
   if (!card) throw new Error("Please pick a number between 1 and 78.");
-
-  const kb = await loadTopic(topicKey);
-  let text = (kb[card] || "").trim();
-  let fallback = false;
-
-  // Zero-hallucination fallback: if the chosen topic has no entry for this card,
-  // use the card's Universe Guidance instead of inventing a meaning.
-  if (!text) {
-    fallback = true;
-    try {
-      const ug = await loadTopic("universe_guidance");
-      text = (ug[card] || "").trim();
-    } catch (_) { /* ignore */ }
-  }
-  if (!text) {
-    text = `Is card (${card}) ke liye is topic mein abhi reading available nahi hai — ek aur number chuniye. ✨`;
-    fallback = true;
-  }
-  return { card, number: Math.floor(Number(number)), topic: topicKey, text, fallback };
+  const r = await getReadingByCard(topicKey, card);
+  return { ...r, number: Math.floor(Number(number)) };
 }

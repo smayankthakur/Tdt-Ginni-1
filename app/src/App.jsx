@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 import Onboarding from "./components/Onboarding";
-import Chat from "./components/Chat";
+// Locked "blend" reading flow (topic → draw one card → grounded reveal).
+// The old free-text/spread chat (Chat.jsx, Composer.jsx, readingBuilder.js,
+// ginniClient.js, demoReading.js) was removed in this build — restore from git
+// history if ever needed.
+import ReadingFlow from "./components/ReadingFlow";
 import { getName, setName as persistName, getDeviceId } from "./lib/rateLimit";
 
 export default function App() {
@@ -20,5 +24,5 @@ export default function App() {
     return <Onboarding onEnter={enter} initialName={getName()} />;
   }
 
-  return <Chat key={name} name={name} onChangeIdentity={changeIdentity} />;
+  return <ReadingFlow key={name} name={name} onChangeIdentity={changeIdentity} />;
 }
