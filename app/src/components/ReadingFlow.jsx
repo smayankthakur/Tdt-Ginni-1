@@ -4,7 +4,7 @@ import StarField from "./StarField";
 import Message from "./Message";
 import CardPicker from "./CardPicker";
 import SubscriptionModal from "./SubscriptionModal";
-import { getReadingByCard, classifyTopic, cardCountFor, resolveSpreadLang, TOPICS, LANGUAGES } from "../lib/readingEngine";
+import { getReadingByCard, classifyTopic, cardCountFor, TOPICS, LANGUAGES } from "../lib/readingEngine";
 import { startSubscription } from "../lib/razorpay";
 import { gateReading } from "../lib/serverGate";
 import { ensureSession, restoreEntitlement } from "../lib/auth";
@@ -87,14 +87,13 @@ export default function ReadingFlow({ name, onChangeIdentity }) {
         if (gate.premiumUntil) setPremiumUntil(gate.premiumUntil);
         let reading, cardObjs;
         if ((topic.count || 1) >= 3) {
-          // Relationship: 3-card Past / Present / Future. Resolve ONE language for
-          // the whole spread so all three cards read uniformly (no mixed languages).
+          // Relationship: 3-card Past / Present / Future. Each card uses the
+          // SELECTED language directly (no override) — aligns with the toggle.
           const labels = ["Past", "Present", "Future"];
-          const spreadLang = await resolveSpreadLang(topic.topicKey, drawn, lang);
           const parts = [];
           cardObjs = [];
           for (let i = 0; i < drawn.length; i++) {
-            const r = await getReadingByCard(topic.topicKey, drawn[i], spreadLang);
+            const r = await getReadingByCard(topic.topicKey, drawn[i], lang);
             parts.push(`${labels[i] || "Card " + (i + 1)} — ${drawn[i]}\n${r.text}`);
             cardObjs.push({ card: drawn[i], position: labels[i] || "" });
           }
