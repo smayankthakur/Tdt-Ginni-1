@@ -27,6 +27,25 @@ secret, it breaks CORS for *all* functions.
   ```
   Note: this is a single origin, so Vercel **preview** URLs stay blocked. Use `*`
   or extend the functions to accept an allow-list if previews must work.
+  Status: **RESOLVED** — `ALLOWED_ORIGIN` updated; live calls now reach the
+  functions (no more `Failed to fetch`).
+
+**1b. Razorpay API "Authentication failed" (live credentials).** *(surfaced once
+#1 was fixed; now RESOLVED)*
+After CORS was fixed, `create-razorpay-subscription` reached Razorpay but returned
+`502 {"error":"Razorpay error","detail":{"error":{"description":"Authentication
+failed","code":"BAD_REQUEST_ERROR"}}}`. The server's `RAZORPAY_KEY_ID` /
+`RAZORPAY_KEY_SECRET` pair didn't authenticate — typically a live/test mismatch
+(the frontend uses the live key `rzp_live_SzPh46jW9yjpV4`, so the secret must be
+the matching **live** secret) or a stale/mistyped secret.
+
+- Fix: re-set the matching live pair (`RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET`)
+  from Razorpay Dashboard → Settings → API Keys (Live mode). `RAZORPAY_PLAN_ID`
+  must also be a live-mode plan.
+- Status: **RESOLVED** — verified live on 2026-06-21: a probe call returned
+  `200` with `subscription_id: sub_T4WGqIzUbaArJ0`, `key_id: rzp_live_…`,
+  `status: "created"`. Full path (CORS → JWT auth → duplicate guard → Razorpay
+  subscription create) now works end-to-end.
 
 ### HIGH
 
