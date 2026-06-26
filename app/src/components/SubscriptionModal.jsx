@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { supabaseEnabled, sendEmailOtp, verifyEmailOtp, currentEmail } from "../lib/auth";
 
+// Premium plan price for 30 days. Change this if your Razorpay plan price changes.
+const PRICE = "₹199";
+
 // "Unlock the Wisdom of Ginni" — Razorpay checkout + optional email sign-in so a
 // paying user can use Premium on any device.
 export default function SubscriptionModal({
@@ -56,7 +59,7 @@ export default function SubscriptionModal({
         <h2 className="text-center font-serif text-2xl text-gold">Unlock the Wisdom of Ginni</h2>
         <p className="mt-1 text-center text-sm text-muted-foreground">
           {premium ? `Your full access is active — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining.`
-            : "Go Premium for 30 days of unlimited tarot guidance."}
+            : `Go Premium — ${PRICE} for 30 days of unlimited tarot guidance.`}
         </p>
 
         <div className="mt-5 rounded-2xl border border-border bg-secondary/40 p-4">
@@ -75,7 +78,11 @@ export default function SubscriptionModal({
             <span className="font-semibold text-gold">✦ Premium Plan</span>
             <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">30 days full access</span>
           </div>
-          <ul className="mt-2 space-y-1 text-sm text-foreground/90">
+          <div className="mt-2 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-gold">{PRICE}</span>
+            <span className="text-sm text-muted-foreground">only · for 30 days</span>
+          </div>
+          <ul className="mt-3 space-y-1 text-sm text-foreground/90">
             <li>✓ Unlimited messages</li>
             <li>✓ Priority response</li>
             <li>✓ Deep spiritual insights</li>
@@ -86,7 +93,7 @@ export default function SubscriptionModal({
 
         <button onClick={onSubscribe} disabled={premium || busy}
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gold-grad py-3 font-semibold text-primary-foreground transition hover:brightness-105 disabled:opacity-50">
-          {premium ? `👑 Active — ${daysLeft} days left` : busy ? "Processing…" : "👑 Subscribe — Unlock 30 days"}
+          {premium ? `👑 Active — ${daysLeft} days left` : busy ? "Processing…" : `👑 Subscribe — ${PRICE} / 30 days`}
         </button>
 
         {supabaseEnabled && !premium && (
